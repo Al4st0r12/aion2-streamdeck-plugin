@@ -19,7 +19,14 @@ type Settings = {
 };
 
 type KeyInstance = StreamDeckKeyAction<Settings>;
-
+type KeyInstanceState = {
+	action: KeyInstance;
+	settings: Settings;
+	interval?: NodeJS.Timeout;
+	debounce?: NodeJS.Timeout;
+	lastStats?: CharacterStats;
+	lastUpdatedAt?: Date;
+};
 // The character currently visible during setup, used only for a new/blank key.
 const FIRST_RUN_SETTINGS: Settings = {
 	characterName: "Azyndralin",
@@ -28,12 +35,7 @@ const FIRST_RUN_SETTINGS: Settings = {
 	refreshMinutes: 5,
 };
 
-const instances = new Map<string, {
-	action: KeyInstance;
-	settings: Settings;
-	interval?: NodeJS.Timeout;
-	debounce?: NodeJS.Timeout;
-}>();
+const instances = new Map<string, KeyInstanceState>();
 
 function escapeXml(value: string): string {
 	return value.replace(/[<>&"']/g, (character) => ({
@@ -84,10 +86,26 @@ function classInfo(className: string): { icon: string; label: string } {
 	return classes[key] ?? { icon: "", label: className.toLocaleUpperCase() };
 }
 
-function statsSvg(data: CharacterStats): string {
+function updateTime(date?: Date): string {
+	if (!date) return "--:--";
+	return new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function statChange(current: number, previous?: number): { label: string; color: string } {
+	if (previous === undefined) return { label: "NEU", color: "#8194a1" };
+	const difference = current - previous;
+	if (difference === 0) return { label: "—", color: "#8194a1" };
+	return difference > 0
+		? { label: `▲ +${formatNumber(difference)}`, color: "#8df0a4" }
+		: { label: `▼ -${formatNumber(Math.abs(difference))}`, color: "#ff8888" };
+}
+
+function statsSvg(data: CharacterStats, previous?: CharacterStats, lastUpdatedAt?: Date): string {
 	const name = escapeXml(data.name.length > 13 ? `${data.name.slice(0, 12)}…` : data.name);
 	const cp = formatNumber(data.combatPower);
 	const gs = formatNumber(data.gearScore);
+	const cpChange = statChange(data.combatPower, previous?.combatPower);
+	const gearChange = statChange(data.gearScore, previous?.gearScore);
 	const classData = classInfo(data.className);
 	const meta = escapeXml(`${classData.label} · LV ${data.level}`);
 	const server = escapeXml(data.serverName.toLocaleUpperCase());
@@ -109,26 +127,49 @@ function statsSvg(data: CharacterStats): string {
 <path d="M8 52h128v40H8zM8 100h128v36H8z" fill="#fff" fill-opacity=".025"/>
 ${classBadge}
 <text x="47" y="15" fill="#78f2fb" font-family="Arial,sans-serif" font-size="7" font-weight="700" letter-spacing="1.4">AION 2</text>
+<text x="136" y="15" fill="#a8bac4" font-family="Arial,sans-serif" font-size="6.4" font-weight="700" text-anchor="end">AKT ${updateTime(lastUpdatedAt)}</text>
 <text x="47" y="30" fill="#fff7e8" font-family="Arial,sans-serif" font-size="12.5" font-weight="700">${name}</text>
 <text x="47" y="42" fill="#a8bac4" font-family="Arial,sans-serif" font-size="7.4" font-weight="700" letter-spacing=".35">${meta}</text>
 <image x="10" y="55" width="31" height="31" href="${powerIcon}" preserveAspectRatio="xMidYMid meet"/>
 <text x="45" y="64" fill="#89a5b5" font-family="Arial,sans-serif" font-size="7.2" font-weight="700" letter-spacing=".7">KAMPFKRAFT</text>
+<text x="136" y="64" fill="${cpChange.color}" font-family="Arial,sans-serif" font-size="6.2" font-weight="700" text-anchor="end">${cpChange.label}</text>
 <text x="44" y="87" fill="url(#power)" font-family="Arial,sans-serif" font-size="23" font-weight="700" letter-spacing="-.45">${cp}</text>
 <image x="10" y="102" width="31" height="31" href="${levelIcon}" preserveAspectRatio="xMidYMid meet"/>
 <text x="45" y="111" fill="#b9a779" font-family="Arial,sans-serif" font-size="7.2" font-weight="700" letter-spacing=".7">ITEM-LEVEL</text>
+<text x="136" y="111" fill="${gearChange.color}" font-family="Arial,sans-serif" font-size="6.2" font-weight="700" text-anchor="end">${gearChange.label}</text>
 <text x="44" y="134" fill="url(#gear)" font-family="Arial,sans-serif" font-size="23" font-weight="700" letter-spacing="-.45">${gs}</text>
 <text x="136" y="134" fill="#738a99" font-family="Arial,sans-serif" font-size="6.8" font-weight="700" text-anchor="end">${server}</text>
 </svg>`;
 }
 
-function placeholderSvg(message: string): string {
+function placeholderSvg(message: string, hint = "Taste zum erneuten Laden", footer = "AION 2 · ÖFFENTLICHES PROFIL"): string {
 	const text = escapeXml(message.slice(0, 24));
+	const hintText = escapeXml(hint.slice(0, 32));
+	const footerText = escapeXml(footer.slice(0, 32));
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
 <rect width="144" height="144" rx="22" fill="#0b1422"/><rect x="4" y="4" width="136" height="136" rx="19" fill="none" stroke="#57d5d2" stroke-width="2.5"/>
 <text x="72" y="42" fill="#57d5d2" font-family="Arial,sans-serif" font-size="14" font-weight="700" text-anchor="middle">AION 2</text>
-<text x="72" y="78" fill="#e7edf5" font-family="Arial,sans-serif" font-size="11" text-anchor="middle">${text}</text>
-<text x="72" y="109" fill="#8393a8" font-family="Arial,sans-serif" font-size="9" text-anchor="middle">Drücken zum Laden</text>
+<text x="72" y="74" fill="#e7edf5" font-family="Arial,sans-serif" font-size="10" font-weight="700" text-anchor="middle">${text}</text>
+<text x="72" y="94" fill="#b3c0ca" font-family="Arial,sans-serif" font-size="8" text-anchor="middle">${hintText}</text>
+<text x="72" y="126" fill="#8393a8" font-family="Arial,sans-serif" font-size="7" text-anchor="middle">${footerText}</text>
 </svg>`;
+}
+
+function explainError(error: unknown): { title: string; hint: string } {
+	const message = error instanceof Error ? error.message : "Unbekannter Fehler beim Laden.";
+	if (/nicht gefunden|gefunden, aber nicht auf Server|mehrfach vorhanden|mehrfach gefunden|öffentlich|Schreibweise/i.test(message)) {
+		return { title: "PROFIL NICHT GEFUNDEN", hint: "Name, Region & Server prüfen" };
+	}
+	if (/begrenzt|HTTP 429|HTTP 503|rate limit/i.test(message)) {
+		return { title: "ANFRAGE BEGRENZT", hint: "In Kürze erneut laden" };
+	}
+	if (/keine verbindung|nicht erreichbar|zeitüberschreitung|timeout|fetch failed|internet/i.test(message)) {
+		return { title: "VERBINDUNG FEHLT", hint: "Internet prüfen, Taste drücken" };
+	}
+	if (/nicht verfügbar|enthält keine|ungültige antwort/i.test(message)) {
+		return { title: "PROFIL UNVOLLSTÄNDIG", hint: "Öffentliches Profil prüfen" };
+	}
+	return { title: "AKTUALISIERUNG FEHLGESCHLAGEN", hint: "Details in den Einstellungen" };
 }
 
 function setImage(action: KeyInstance, svg: string): void {
@@ -144,14 +185,21 @@ async function refresh(action: KeyInstance, settings: Settings): Promise<void> {
 		const data = await lookupCharacter(settings.characterName ?? "", settings.server ?? "", settings.region ?? "eu");
 		const current = instances.get(action.id);
 		if (current && !settingsMatch(current.settings, settings)) return;
-		setImage(action, statsSvg(data));
-		await streamDeck.ui.sendToPropertyInspector({ status: `Aktualisiert: ${data.name} · ${data.serverName} · ${new Date().toLocaleTimeString("de-DE")}` });
+		const updatedAt = new Date();
+		setImage(action, statsSvg(data, current?.lastStats, updatedAt));
+		if (current) {
+			current.lastStats = data;
+			current.lastUpdatedAt = updatedAt;
+		}
+		await streamDeck.ui.sendToPropertyInspector({ status: `Aktualisiert: ${data.name} · ${data.serverName} · ${updatedAt.toLocaleString("de-DE")}` });
 	} catch (error) {
 		const current = instances.get(action.id);
 		if (current && !settingsMatch(current.settings, settings)) return;
 		const message = error instanceof Error ? error.message : "Unbekannter Fehler beim Laden.";
-		setImage(action, placeholderSvg("Ladefehler"));
-		await streamDeck.ui.sendToPropertyInspector({ status: message });
+		const display = explainError(error);
+		const lastSuccess = current?.lastUpdatedAt ? `Letzter Erfolg ${updateTime(current.lastUpdatedAt)}` : "Noch keine erfolgreichen Daten";
+		setImage(action, placeholderSvg(display.title, display.hint, lastSuccess));
+		await streamDeck.ui.sendToPropertyInspector({ status: `Fehler: ${message} · ${lastSuccess}` });
 		streamDeck.logger.warn(`AION 2 profile lookup failed: ${message}`);
 	}
 }
@@ -207,6 +255,10 @@ export class CharacterStatsAction extends SingletonAction<Settings> {
 			instance = { action, settings };
 			instances.set(action.id, instance);
 		} else {
+			if (!settingsMatch(instance.settings, settings)) {
+				instance.lastStats = undefined;
+				instance.lastUpdatedAt = undefined;
+			}
 			instance.settings = settings;
 		}
 		setImage(action, settings.characterName?.trim() ? placeholderSvg("Lade Charakter …") : placeholderSvg("Name einstellen"));

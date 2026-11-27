@@ -17,6 +17,7 @@ var node_process = require('node:process');
 var fs = require('node:fs');
 var node_crypto = require('node:crypto');
 var node_child_process = require('node:child_process');
+var node_os = require('node:os');
 
 /**
  * Default language supported by all i18n providers.
@@ -8523,21 +8524,40 @@ function stripMarkup(value) {
     return value.replace(/<[^>]*>/g, "").trim();
 }
 async function getJson(url) {
-    const response = await fetch(url, {
-        headers: {
-            Accept: "application/json",
-            "User-Agent": USER_AGENT,
-        },
-        signal: AbortSignal.timeout(15_000),
-    });
+    let response;
+    try {
+        response = await fetch(url, {
+            headers: {
+                Accept: "application/json",
+                "User-Agent": USER_AGENT,
+            },
+            signal: AbortSignal.timeout(15_000),
+        });
+    }
+    catch (error) {
+        if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+            throw new Error("Zeitüberschreitung beim Laden des AION-2-Profils. Prüfe deine Internetverbindung und versuche es erneut.");
+        }
+        if (error instanceof TypeError) {
+            throw new Error("AION 2 ist gerade nicht erreichbar. Prüfe deine Internetverbindung und lade die Taste erneut.");
+        }
+        throw new Error("Das AION-2-Profil konnte nicht geladen werden. Bitte später erneut versuchen.");
+    }
     if (!response.ok) {
         if (response.status === 404)
-            throw new Error("Charakterprofil nicht gefunden oder noch nicht öffentlich.");
-        if (response.status === 429 || response.status === 503)
-            throw new Error("AION 2 begrenzt gerade Anfragen. Bitte später erneut versuchen.");
-        throw new Error(`AION-2-API antwortet mit HTTP ${response.status}.`);
+            throw new Error("AION-2-Profil oder Suchdienst nicht gefunden. Prüfe Name, Region und Server; das Profil muss öffentlich sein.");
+        if (response.status === 429)
+            throw new Error("AION 2 begrenzt gerade die Anfragen. Warte kurz und lade dann erneut.");
+        if (response.status === 503 || response.status >= 500)
+            throw new Error(`Der AION-2-Dienst ist vorübergehend nicht verfügbar (HTTP ${response.status}). Bitte später erneut versuchen.`);
+        throw new Error(`AION 2 hat die Anfrage abgelehnt (HTTP ${response.status}). Prüfe Region und Einstellungen.`);
     }
-    return (await response.json());
+    try {
+        return (await response.json());
+    }
+    catch {
+        throw new Error("AION 2 hat eine ungültige Antwort gesendet. Bitte später erneut versuchen.");
+    }
 }
 function normalizeRegion(region) {
     const valid = ["eu", "nae", "naw", "la", "as"];
@@ -8547,21 +8567,24 @@ async function lookupUncached(characterName, server, region) {
     const searchUrl = new URL("https://api-search.plaync.com/aion2global/search/v2/character");
     searchUrl.search = new URLSearchParams({ keyword: characterName, region, localeInfo: "en-US" }).toString();
     const search = await getJson(searchUrl);
-    const exactMatches = (search.list ?? []).filter((result) => {
-        if (!result.name || !result.characterId || !result.serverId || !result.serverName)
+    const nameMatches = (search.list ?? []).filter((result) => result.name && stripMarkup(result.name).toLocaleLowerCase() === characterName.toLocaleLowerCase());
+    const exactMatches = nameMatches.filter((result) => {
+        if (!result.characterId || !result.serverId || !result.serverName)
             return false;
-        const sameName = stripMarkup(result.name).toLocaleLowerCase() === characterName.toLocaleLowerCase();
-        const sameServer = !server || result.serverName.toLocaleLowerCase() === server.toLocaleLowerCase();
-        return sameName && sameServer;
+        return !server || result.serverName.toLocaleLowerCase() === server.toLocaleLowerCase();
     });
     if (exactMatches.length === 0) {
+        const availableServers = [...new Set(nameMatches.map((match) => match.serverName).filter((name) => Boolean(name)))];
+        if (server && availableServers.length > 0) {
+            throw new Error(`„${characterName}“ wurde gefunden, aber nicht auf Server „${server}“. Verfügbare Server: ${availableServers.join(", ")}.`);
+        }
         throw new Error(server
-            ? `„${characterName}“ wurde auf ${server} (${region.toUpperCase()}) nicht gefunden.`
-            : `„${characterName}“ wurde in ${region.toUpperCase()} nicht gefunden.`);
+            ? `Charakter „${characterName}“ wurde auf ${server} (${region.toUpperCase()}) nicht gefunden. Prüfe Schreibweise und Server; das Profil muss öffentlich sein.`
+            : `Charakter „${characterName}“ wurde in ${region.toUpperCase()} nicht gefunden. Prüfe Schreibweise und ob das Profil öffentlich ist.`);
     }
     if (exactMatches.length > 1) {
         const servers = [...new Set(exactMatches.map((match) => match.serverName))].join(", ");
-        throw new Error(`Name mehrfach gefunden. Bitte den Server eintragen (${servers}).`);
+        throw new Error(`Der Name „${characterName}“ ist mehrfach vorhanden. Trage den Server ein: ${servers}.`);
     }
     const match = exactMatches[0];
     const characterId = decodeURIComponent(match.characterId);
@@ -8667,10 +8690,27 @@ function classInfo(className) {
     };
     return classes[key] ?? { icon: "", label: className.toLocaleUpperCase() };
 }
-function statsSvg(data) {
+function updateTime(date) {
+    if (!date)
+        return "--:--";
+    return new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+function statChange(current, previous) {
+    if (previous === undefined)
+        return { label: "NEU", color: "#8194a1" };
+    const difference = current - previous;
+    if (difference === 0)
+        return { label: "—", color: "#8194a1" };
+    return difference > 0
+        ? { label: `▲ +${formatNumber(difference)}`, color: "#8df0a4" }
+        : { label: `▼ -${formatNumber(Math.abs(difference))}`, color: "#ff8888" };
+}
+function statsSvg(data, previous, lastUpdatedAt) {
     const name = escapeXml$1(data.name.length > 13 ? `${data.name.slice(0, 12)}…` : data.name);
     const cp = formatNumber(data.combatPower);
     const gs = formatNumber(data.gearScore);
+    const cpChange = statChange(data.combatPower, previous?.combatPower);
+    const gearChange = statChange(data.gearScore, previous?.gearScore);
     const classData = classInfo(data.className);
     const meta = escapeXml$1(`${classData.label} · LV ${data.level}`);
     const server = escapeXml$1(data.serverName.toLocaleUpperCase());
@@ -8692,25 +8732,47 @@ function statsSvg(data) {
 <path d="M8 52h128v40H8zM8 100h128v36H8z" fill="#fff" fill-opacity=".025"/>
 ${classBadge}
 <text x="47" y="15" fill="#78f2fb" font-family="Arial,sans-serif" font-size="7" font-weight="700" letter-spacing="1.4">AION 2</text>
+<text x="136" y="15" fill="#a8bac4" font-family="Arial,sans-serif" font-size="6.4" font-weight="700" text-anchor="end">AKT ${updateTime(lastUpdatedAt)}</text>
 <text x="47" y="30" fill="#fff7e8" font-family="Arial,sans-serif" font-size="12.5" font-weight="700">${name}</text>
 <text x="47" y="42" fill="#a8bac4" font-family="Arial,sans-serif" font-size="7.4" font-weight="700" letter-spacing=".35">${meta}</text>
 <image x="10" y="55" width="31" height="31" href="${powerIcon}" preserveAspectRatio="xMidYMid meet"/>
 <text x="45" y="64" fill="#89a5b5" font-family="Arial,sans-serif" font-size="7.2" font-weight="700" letter-spacing=".7">KAMPFKRAFT</text>
+<text x="136" y="64" fill="${cpChange.color}" font-family="Arial,sans-serif" font-size="6.2" font-weight="700" text-anchor="end">${cpChange.label}</text>
 <text x="44" y="87" fill="url(#power)" font-family="Arial,sans-serif" font-size="23" font-weight="700" letter-spacing="-.45">${cp}</text>
 <image x="10" y="102" width="31" height="31" href="${levelIcon}" preserveAspectRatio="xMidYMid meet"/>
 <text x="45" y="111" fill="#b9a779" font-family="Arial,sans-serif" font-size="7.2" font-weight="700" letter-spacing=".7">ITEM-LEVEL</text>
+<text x="136" y="111" fill="${gearChange.color}" font-family="Arial,sans-serif" font-size="6.2" font-weight="700" text-anchor="end">${gearChange.label}</text>
 <text x="44" y="134" fill="url(#gear)" font-family="Arial,sans-serif" font-size="23" font-weight="700" letter-spacing="-.45">${gs}</text>
 <text x="136" y="134" fill="#738a99" font-family="Arial,sans-serif" font-size="6.8" font-weight="700" text-anchor="end">${server}</text>
 </svg>`;
 }
-function placeholderSvg(message) {
+function placeholderSvg(message, hint = "Taste zum erneuten Laden", footer = "AION 2 · ÖFFENTLICHES PROFIL") {
     const text = escapeXml$1(message.slice(0, 24));
+    const hintText = escapeXml$1(hint.slice(0, 32));
+    const footerText = escapeXml$1(footer.slice(0, 32));
     return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
 <rect width="144" height="144" rx="22" fill="#0b1422"/><rect x="4" y="4" width="136" height="136" rx="19" fill="none" stroke="#57d5d2" stroke-width="2.5"/>
 <text x="72" y="42" fill="#57d5d2" font-family="Arial,sans-serif" font-size="14" font-weight="700" text-anchor="middle">AION 2</text>
-<text x="72" y="78" fill="#e7edf5" font-family="Arial,sans-serif" font-size="11" text-anchor="middle">${text}</text>
-<text x="72" y="109" fill="#8393a8" font-family="Arial,sans-serif" font-size="9" text-anchor="middle">Drücken zum Laden</text>
+<text x="72" y="74" fill="#e7edf5" font-family="Arial,sans-serif" font-size="10" font-weight="700" text-anchor="middle">${text}</text>
+<text x="72" y="94" fill="#b3c0ca" font-family="Arial,sans-serif" font-size="8" text-anchor="middle">${hintText}</text>
+<text x="72" y="126" fill="#8393a8" font-family="Arial,sans-serif" font-size="7" text-anchor="middle">${footerText}</text>
 </svg>`;
+}
+function explainError(error) {
+    const message = error instanceof Error ? error.message : "Unbekannter Fehler beim Laden.";
+    if (/nicht gefunden|gefunden, aber nicht auf Server|mehrfach vorhanden|mehrfach gefunden|öffentlich|Schreibweise/i.test(message)) {
+        return { title: "PROFIL NICHT GEFUNDEN", hint: "Name, Region & Server prüfen" };
+    }
+    if (/begrenzt|HTTP 429|HTTP 503|rate limit/i.test(message)) {
+        return { title: "ANFRAGE BEGRENZT", hint: "In Kürze erneut laden" };
+    }
+    if (/keine verbindung|nicht erreichbar|zeitüberschreitung|timeout|fetch failed|internet/i.test(message)) {
+        return { title: "VERBINDUNG FEHLT", hint: "Internet prüfen, Taste drücken" };
+    }
+    if (/nicht verfügbar|enthält keine|ungültige antwort/i.test(message)) {
+        return { title: "PROFIL UNVOLLSTÄNDIG", hint: "Öffentliches Profil prüfen" };
+    }
+    return { title: "AKTUALISIERUNG FEHLGESCHLAGEN", hint: "Details in den Einstellungen" };
 }
 function setImage(action, svg) {
     void action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
@@ -8724,16 +8786,23 @@ async function refresh(action, settings) {
         const current = instances$1.get(action.id);
         if (current && !settingsMatch(current.settings, settings))
             return;
-        setImage(action, statsSvg(data));
-        await streamDeck.ui.sendToPropertyInspector({ status: `Aktualisiert: ${data.name} · ${data.serverName} · ${new Date().toLocaleTimeString("de-DE")}` });
+        const updatedAt = new Date();
+        setImage(action, statsSvg(data, current?.lastStats, updatedAt));
+        if (current) {
+            current.lastStats = data;
+            current.lastUpdatedAt = updatedAt;
+        }
+        await streamDeck.ui.sendToPropertyInspector({ status: `Aktualisiert: ${data.name} · ${data.serverName} · ${updatedAt.toLocaleString("de-DE")}` });
     }
     catch (error) {
         const current = instances$1.get(action.id);
         if (current && !settingsMatch(current.settings, settings))
             return;
         const message = error instanceof Error ? error.message : "Unbekannter Fehler beim Laden.";
-        setImage(action, placeholderSvg("Ladefehler"));
-        await streamDeck.ui.sendToPropertyInspector({ status: message });
+        const display = explainError(error);
+        const lastSuccess = current?.lastUpdatedAt ? `Letzter Erfolg ${updateTime(current.lastUpdatedAt)}` : "Noch keine erfolgreichen Daten";
+        setImage(action, placeholderSvg(display.title, display.hint, lastSuccess));
+        await streamDeck.ui.sendToPropertyInspector({ status: `Fehler: ${message} · ${lastSuccess}` });
         streamDeck.logger.warn(`AION 2 profile lookup failed: ${message}`);
     }
 }
@@ -8804,6 +8873,10 @@ let CharacterStatsAction = (() => {
                 instances$1.set(action.id, instance);
             }
             else {
+                if (!settingsMatch(instance.settings, settings)) {
+                    instance.lastStats = undefined;
+                    instance.lastUpdatedAt = undefined;
+                }
                 instance.settings = settings;
             }
             setImage(action, settings.characterName?.trim() ? placeholderSvg("Lade Charakter …") : placeholderSvg("Name einstellen"));
@@ -8830,6 +8903,7 @@ let CharacterStatsAction = (() => {
 
 const alertOptions = [0, 1, 3, 5, 10];
 const hourMilliseconds = 3_600_000;
+const soundStyles = ["soft", "classic", "bright"];
 const timeZones = {
     eu: { name: "EUROPA", zone: "Europe/Berlin" },
     nae: { name: "NA OST", zone: "America/New_York" },
@@ -8840,32 +8914,73 @@ const timeZones = {
 const instances = new Map();
 const playedWarnings = new Set();
 const shugoIcon = `data:image/png;base64,${fs.readFileSync(path.join(__dirname, "..", "imgs", "aion2", "shugo_festa_icon.png")).toString("base64")}`;
-const shugoTonePath = path.join(__dirname, "..", "imgs", "aion2", "shugo-alert.wav");
-function playSignalTone() {
+const shugoTonePaths = {
+    soft: path.join(__dirname, "..", "imgs", "aion2", "shugo-alert-soft.wav"),
+    classic: path.join(__dirname, "..", "imgs", "aion2", "shugo-alert-classic.wav"),
+    bright: path.join(__dirname, "..", "imgs", "aion2", "shugo-alert-bright.wav"),
+};
+function playSignalTone(style, volume) {
+    if (volume <= 0)
+        return;
+    let temporaryPath;
+    const cleanup = () => {
+        if (!temporaryPath)
+            return;
+        try {
+            fs.unlinkSync(temporaryPath);
+        }
+        catch {
+            // The temp file may already have been removed.
+        }
+        temporaryPath = undefined;
+    };
     try {
+        const basePath = shugoTonePaths[style];
+        let soundPath = basePath;
+        if (volume < 100) {
+            const tone = Buffer.from(fs.readFileSync(basePath));
+            for (let offset = 44; offset + 1 < tone.length; offset += 2) {
+                tone.writeInt16LE(Math.round(tone.readInt16LE(offset) * volume / 100), offset);
+            }
+            temporaryPath = path.join(node_os.tmpdir(), `aion2-shugo-${process.pid}-${node_crypto.randomUUID()}.wav`);
+            fs.writeFileSync(temporaryPath, tone);
+            soundPath = temporaryPath;
+        }
         if (process.platform === "win32") {
-            const soundPath = shugoTonePath.replace(/'/g, "''");
-            const command = `$player = New-Object System.Media.SoundPlayer '${soundPath}'; $player.PlaySync()`;
+            const escapedPath = soundPath.replace(/'/g, "''");
+            const command = `$player = New-Object System.Media.SoundPlayer '${escapedPath}'; $player.PlaySync()`;
             const player = node_child_process.spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", command], {
                 windowsHide: true,
                 stdio: "ignore",
             });
-            player.once("error", (error) => streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`));
+            player.once("error", (error) => {
+                cleanup();
+                streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`);
+            });
             player.once("close", (code) => {
+                cleanup();
                 if (code !== 0)
                     streamDeck.logger.warn(`Shugo-Signalton-Prozess wurde mit Code ${code} beendet.`);
             });
         }
         else if (process.platform === "darwin") {
-            const player = node_child_process.spawn("/usr/bin/afplay", [shugoTonePath], { stdio: "ignore" });
-            player.once("error", (error) => streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`));
+            const player = node_child_process.spawn("/usr/bin/afplay", [soundPath], { stdio: "ignore" });
+            player.once("error", (error) => {
+                cleanup();
+                streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`);
+            });
             player.once("close", (code) => {
+                cleanup();
                 if (code !== 0)
                     streamDeck.logger.warn(`Shugo-Signalton-Prozess wurde mit Code ${code} beendet.`);
             });
         }
+        else {
+            cleanup();
+        }
     }
     catch (error) {
+        cleanup();
         streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${String(error)}`);
     }
 }
@@ -8934,25 +9049,36 @@ function update(instance) {
     const selected = timeZones[region];
     const requestedAlert = Number(settings.alertMinutes ?? 5);
     const alertMinutes = alertOptions.includes(requestedAlert) ? requestedAlert : 5;
+    const requestedSecondAlert = Number(settings.secondAlertMinutes ?? 1);
+    const secondAlertMinutes = alertOptions.includes(requestedSecondAlert) ? requestedSecondAlert : 1;
     const soundEnabled = settings.soundEnabled !== false;
+    const requestedVolume = Number(settings.soundVolume ?? 40);
+    const soundVolume = Number.isFinite(requestedVolume) ? Math.max(0, Math.min(100, requestedVolume)) : 40;
+    const requestedStyle = settings.soundStyle ?? "classic";
+    const soundStyle = soundStyles.includes(requestedStyle) ? requestedStyle : "classic";
     const now = new Date();
     const millisecondsPastHour = now.getTime() % hourMilliseconds;
     const active = 180 - Math.floor(millisecondsPastHour / 1000) > 0;
     const secondsToEvent = Math.ceil((hourMilliseconds - millisecondsPastHour) / 1000);
     const nextEvent = Math.floor(now.getTime() / hourMilliseconds) + 1;
-    const warningKey = `${nextEvent}:${alertMinutes}`;
     for (const playedKey of playedWarnings) {
         if (Number(playedKey.split(":")[0]) < nextEvent - 2)
             playedWarnings.delete(playedKey);
     }
-    if (soundEnabled && alertMinutes > 0 && !active && secondsToEvent > 0 && secondsToEvent <= alertMinutes * 60 && instance.lastSoundKey !== warningKey) {
-        instance.lastSoundKey = warningKey;
-        if (!playedWarnings.has(warningKey)) {
-            playedWarnings.add(warningKey);
-            playSignalTone();
+    if (soundEnabled && soundVolume > 0 && !active && secondsToEvent > 0) {
+        const activeThresholds = [...new Set([alertMinutes, secondAlertMinutes])]
+            .filter((minutes) => minutes > 0 && secondsToEvent <= minutes * 60)
+            .sort((first, second) => first - second);
+        const unplayedThresholds = activeThresholds.filter((minutes) => !playedWarnings.has(`${nextEvent}:${minutes}`));
+        const nextWarning = unplayedThresholds[0];
+        if (nextWarning !== undefined) {
+            playedWarnings.add(`${nextEvent}:${nextWarning}`);
+            for (const missedWarning of unplayedThresholds.slice(1))
+                playedWarnings.add(`${nextEvent}:${missedWarning}`);
+            playSignalTone(soundStyle, soundVolume);
         }
     }
-    void action.setImage(`data:image/svg+xml,${encodeURIComponent(timerSvg(selected.name, now, selected.zone, alertMinutes, soundEnabled))}`);
+    void action.setImage(`data:image/svg+xml,${encodeURIComponent(timerSvg(selected.name, now, selected.zone, alertMinutes, soundEnabled && soundVolume > 0))}`);
 }
 let ShugoTimerAction = (() => {
     let _classDecorators = [action({ UUID: "com.codex.aion2stats.shugo" })];

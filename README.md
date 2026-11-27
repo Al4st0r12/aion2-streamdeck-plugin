@@ -4,17 +4,17 @@
 
 ![AION 2 Stats Banner](assets/brand/plugin-banner.png)
 
-**Aktuelle Version: 0.2.6.0** · [Änderungen ansehen](CHANGELOG.md) · [Ältere Versionen herunterladen](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases)
+**Aktuelle Version: 0.2.7.0** · [Änderungen ansehen](CHANGELOG.md) · [Ältere Versionen herunterladen](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases)
 
 Ein Stream-Deck-Plugin mit zwei Tasten für AION 2:
 
-- **AION 2 CP & Gearscore** zeigt Combat Power, Item Level, Charaktername, Klasse und Level aus dem öffentlichen Charakterprofil. Die Taste aktualisiert sich standardmäßig alle fünf Minuten; ein Tastendruck lädt die Werte sofort neu.
-- **Nächstes Shugo-Festival** zeigt den Countdown über dem offiziellen Shugo-Festa-Eingangsicon. Die Vorwarnung lässt sich pro Taste auf 0, 1, 3, 5 oder 10 Minuten einstellen. Zu ihrem Beginn kann einmalig ein leiser Signalton abgespielt werden. In der Vorwarnzeit wird der Timer farblich hervorgehoben; in den letzten 30 Sekunden blinkt das Shugo-Logo. Während der ersten drei Minuten wird die verbleibende Anmeldezeit angezeigt. Die Serverregion ist ebenfalls pro Taste auswählbar.
+- **AION 2 CP & Gearscore** zeigt Combat Power, Item Level, Charaktername, Klasse und Level aus dem öffentlichen Charakterprofil. Änderungen zu den zuletzt geladenen Werten werden mit Pfeil und Differenz markiert; die Taste zeigt außerdem die Uhrzeit der letzten erfolgreichen Aktualisierung. Sie aktualisiert sich standardmäßig alle fünf Minuten; ein Tastendruck lädt die Werte sofort neu.
+- **Nächstes Shugo-Festival** zeigt den Countdown über dem offiziellen Shugo-Festa-Eingangsicon. Die visuelle Vorwarnung lässt sich pro Taste auf 0, 1, 3, 5 oder 10 Minuten einstellen. Ein zusätzlicher Signalton kann unabhängig davon konfiguriert werden; Klangstil und Lautstärke sind ebenfalls einstellbar. In der Vorwarnzeit wird der Timer farblich hervorgehoben; in den letzten 30 Sekunden blinkt das Shugo-Logo. Während der ersten drei Minuten wird die verbleibende Anmeldezeit angezeigt. Die Serverregion ist ebenfalls pro Taste auswählbar.
 
 ## Plugin installieren und einrichten
 
 1. Stream Deck 7.1 oder neuer öffnen.
-2. [AION 2 Stats v0.2.6.0 herunterladen und mit einem Doppelklick installieren](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases/download/v0.2.6.0/AION-2-Stats-0.2.6.0.streamDeckPlugin). Stream Deck fragt gegebenenfalls nach, ob das Plugin installiert werden soll.
+2. [AION 2 Stats v0.2.7.0 herunterladen und mit einem Doppelklick installieren](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases/download/v0.2.7.0/AION-2-Stats-0.2.7.0.streamDeckPlugin). Stream Deck fragt gegebenenfalls nach, ob das Plugin installiert werden soll.
 3. **AION 2 CP & Gearscore** auf eine Taste ziehen.
 4. Für die Statistiken im Einstellungsbereich Charaktername und Region eintragen. Falls der Name mehrfach vorkommt, zusätzlich den Server setzen. Die Shugo-Taste kann unabhängig davon verwendet werden.
 

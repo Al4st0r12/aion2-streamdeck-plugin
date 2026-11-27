@@ -7,15 +7,26 @@ import streamDeck, {
 	type WillDisappearEvent,
 	SingletonAction,
 } from "@elgato/streamdeck";
-import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-type ShugoSettings = { region?: string; alertMinutes?: number; soundEnabled?: boolean };
+type SoundStyle = "soft" | "classic" | "bright";
+type ShugoSettings = {
+	region?: string;
+	alertMinutes?: number;
+	secondAlertMinutes?: number;
+	soundEnabled?: boolean;
+	soundStyle?: SoundStyle;
+	soundVolume?: number;
+};
 type ShugoKey = StreamDeckKeyAction<ShugoSettings>;
-type ShugoInstance = { action: ShugoKey; settings: ShugoSettings; interval?: NodeJS.Timeout; lastSoundKey?: string };
+type ShugoInstance = { action: ShugoKey; settings: ShugoSettings; interval?: NodeJS.Timeout };
 
 const alertOptions = [0, 1, 3, 5, 10];
 const hourMilliseconds = 3_600_000;
+const soundStyles: SoundStyle[] = ["soft", "classic", "bright"];
 
 const timeZones: Record<string, { name: string; zone: string }> = {
 	eu: { name: "EUROPA", zone: "Europe/Berlin" },
@@ -28,29 +39,68 @@ const timeZones: Record<string, { name: string; zone: string }> = {
 const instances = new Map<string, ShugoInstance>();
 const playedWarnings = new Set<string>();
 const shugoIcon = `data:image/png;base64,${readFileSync(join(__dirname, "..", "imgs", "aion2", "shugo_festa_icon.png")).toString("base64")}`;
-const shugoTonePath = join(__dirname, "..", "imgs", "aion2", "shugo-alert.wav");
+const shugoTonePaths: Record<SoundStyle, string> = {
+	soft: join(__dirname, "..", "imgs", "aion2", "shugo-alert-soft.wav"),
+	classic: join(__dirname, "..", "imgs", "aion2", "shugo-alert-classic.wav"),
+	bright: join(__dirname, "..", "imgs", "aion2", "shugo-alert-bright.wav"),
+};
 
-function playSignalTone(): void {
+function playSignalTone(style: SoundStyle, volume: number): void {
+	if (volume <= 0) return;
+	let temporaryPath: string | undefined;
+	const cleanup = (): void => {
+		if (!temporaryPath) return;
+		try {
+			unlinkSync(temporaryPath);
+		} catch {
+			// The temp file may already have been removed.
+		}
+		temporaryPath = undefined;
+	};
+
 	try {
+		const basePath = shugoTonePaths[style];
+		let soundPath = basePath;
+		if (volume < 100) {
+			const tone = Buffer.from(readFileSync(basePath));
+			for (let offset = 44; offset + 1 < tone.length; offset += 2) {
+				tone.writeInt16LE(Math.round(tone.readInt16LE(offset) * volume / 100), offset);
+			}
+			temporaryPath = join(tmpdir(), `aion2-shugo-${process.pid}-${randomUUID()}.wav`);
+			writeFileSync(temporaryPath, tone);
+			soundPath = temporaryPath;
+		}
+
 		if (process.platform === "win32") {
-			const soundPath = shugoTonePath.replace(/'/g, "''");
-			const command = `$player = New-Object System.Media.SoundPlayer '${soundPath}'; $player.PlaySync()`;
+			const escapedPath = soundPath.replace(/'/g, "''");
+			const command = `$player = New-Object System.Media.SoundPlayer '${escapedPath}'; $player.PlaySync()`;
 			const player = spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", command], {
 				windowsHide: true,
 				stdio: "ignore",
 			});
-			player.once("error", (error) => streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`));
+			player.once("error", (error) => {
+				cleanup();
+				streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`);
+			});
 			player.once("close", (code) => {
+				cleanup();
 				if (code !== 0) streamDeck.logger.warn(`Shugo-Signalton-Prozess wurde mit Code ${code} beendet.`);
 			});
 		} else if (process.platform === "darwin") {
-			const player = spawn("/usr/bin/afplay", [shugoTonePath], { stdio: "ignore" });
-			player.once("error", (error) => streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`));
+			const player = spawn("/usr/bin/afplay", [soundPath], { stdio: "ignore" });
+			player.once("error", (error) => {
+				cleanup();
+				streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`);
+			});
 			player.once("close", (code) => {
+				cleanup();
 				if (code !== 0) streamDeck.logger.warn(`Shugo-Signalton-Prozess wurde mit Code ${code} beendet.`);
 			});
+		} else {
+			cleanup();
 		}
 	} catch (error) {
+		cleanup();
 		streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${String(error)}`);
 	}
 }
@@ -123,24 +173,34 @@ function update(instance: ShugoInstance): void {
 	const selected = timeZones[region]!;
 	const requestedAlert = Number(settings.alertMinutes ?? 5);
 	const alertMinutes = alertOptions.includes(requestedAlert) ? requestedAlert : 5;
+	const requestedSecondAlert = Number(settings.secondAlertMinutes ?? 1);
+	const secondAlertMinutes = alertOptions.includes(requestedSecondAlert) ? requestedSecondAlert : 1;
 	const soundEnabled = settings.soundEnabled !== false;
+	const requestedVolume = Number(settings.soundVolume ?? 40);
+	const soundVolume = Number.isFinite(requestedVolume) ? Math.max(0, Math.min(100, requestedVolume)) : 40;
+	const requestedStyle = settings.soundStyle ?? "classic";
+	const soundStyle = soundStyles.includes(requestedStyle) ? requestedStyle : "classic";
 	const now = new Date();
 	const millisecondsPastHour = now.getTime() % hourMilliseconds;
 	const active = 180 - Math.floor(millisecondsPastHour / 1000) > 0;
 	const secondsToEvent = Math.ceil((hourMilliseconds - millisecondsPastHour) / 1000);
 	const nextEvent = Math.floor(now.getTime() / hourMilliseconds) + 1;
-	const warningKey = `${nextEvent}:${alertMinutes}`;
 	for (const playedKey of playedWarnings) {
 		if (Number(playedKey.split(":")[0]) < nextEvent - 2) playedWarnings.delete(playedKey);
 	}
-	if (soundEnabled && alertMinutes > 0 && !active && secondsToEvent > 0 && secondsToEvent <= alertMinutes * 60 && instance.lastSoundKey !== warningKey) {
-		instance.lastSoundKey = warningKey;
-		if (!playedWarnings.has(warningKey)) {
-			playedWarnings.add(warningKey);
-			playSignalTone();
+	if (soundEnabled && soundVolume > 0 && !active && secondsToEvent > 0) {
+		const activeThresholds = [...new Set([alertMinutes, secondAlertMinutes])]
+			.filter((minutes) => minutes > 0 && secondsToEvent <= minutes * 60)
+			.sort((first, second) => first - second);
+		const unplayedThresholds = activeThresholds.filter((minutes) => !playedWarnings.has(`${nextEvent}:${minutes}`));
+		const nextWarning = unplayedThresholds[0];
+		if (nextWarning !== undefined) {
+			playedWarnings.add(`${nextEvent}:${nextWarning}`);
+			for (const missedWarning of unplayedThresholds.slice(1)) playedWarnings.add(`${nextEvent}:${missedWarning}`);
+			playSignalTone(soundStyle, soundVolume);
 		}
 	}
-	void action.setImage(`data:image/svg+xml,${encodeURIComponent(timerSvg(selected.name, now, selected.zone, alertMinutes, soundEnabled))}`);
+	void action.setImage(`data:image/svg+xml,${encodeURIComponent(timerSvg(selected.name, now, selected.zone, alertMinutes, soundEnabled && soundVolume > 0))}`);
 }
 
 @action({ UUID: "com.codex.aion2stats.shugo" })

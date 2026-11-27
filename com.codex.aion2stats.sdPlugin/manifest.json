@@ -11,7 +11,7 @@
           "ShowTitle": false
         }
       ],
-      "Tooltip": "Zeigt Kampfkraft, Item-Level und das passende Klassenwappen. Drücken zum Aktualisieren.",
+      "Tooltip": "Zeigt Kampfkraft, Item-Level, Änderungen und den Zeitpunkt der letzten Aktualisierung.",
       "UUID": "com.codex.aion2stats.character"
     },
     {
@@ -24,7 +24,7 @@
           "ShowTitle": false
         }
       ],
-      "Tooltip": "Zeigt Shugo-Countdown und Anmeldezeit. Einstellbare visuelle und akustische Vorwarnung; Logo blinkt in den letzten 30 Sekunden.",
+      "Tooltip": "Shugo-Countdown mit einstellbaren Hinweisen, Signalton, Klangstil und Lautstärke.",
       "UUID": "com.codex.aion2stats.shugo"
     }
   ],
@@ -32,7 +32,7 @@
   "Category": "AION 2 Stats",
   "CategoryIcon": "imgs/category",
   "CodePath": "bin/plugin.js",
-  "Description": "Zeigt Combat Power und Gearscore deines AION-2-Charakters sowie den Countdown zum nächsten Shugo-Festival.",
+  "Description": "Zeigt Combat Power und Item-Level mit Änderungsanzeige und Aktualisierungszeit sowie den anpassbaren Countdown zum nächsten Shugo-Festival.",
   "Icon": "imgs/plugin",
   "Name": "AION 2 Stats",
   "Nodejs": {
@@ -53,5 +53,5 @@
     "MinimumVersion": "7.1"
   },
   "UUID": "com.codex.aion2stats",
-  "Version": "0.2.6.0"
+  "Version": "0.2.7.0"
 }

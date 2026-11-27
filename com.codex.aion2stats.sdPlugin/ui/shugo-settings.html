@@ -12,6 +12,8 @@
     select { box-sizing: border-box; width: 100%; margin-top: 6px; padding: 8px 9px; border: 1px solid #4c5057; border-radius: 4px; color: #f5f6f8; background: #2b2d31; font: inherit; }
     .toggle { display: flex; align-items: flex-start; gap: 9px; line-height: 1.45; }
     .toggle input { margin: 2px 0 0; accent-color: #e6c67a; }
+    .range-heading { display: flex; justify-content: space-between; align-items: center; }
+    input[type="range"] { box-sizing: border-box; width: 100%; margin: 9px 0 0; accent-color: #e6c67a; }
     .hint { color: #c4cad4; font-size: 11px; line-height: 1.5; }
   </style>
 </head>
@@ -34,39 +36,79 @@
       <option value="10">10 Minuten</option>
     </select>
   </label>
+  <label for="secondAlertMinutes">Zusätzlicher Signalton
+    <select id="secondAlertMinutes">
+      <option value="0">Keiner</option>
+      <option value="1" selected>1 Minute vorher</option>
+      <option value="3">3 Minuten vorher</option>
+      <option value="5">5 Minuten vorher</option>
+      <option value="10">10 Minuten vorher</option>
+    </select>
+  </label>
   <label class="toggle" for="soundEnabled">
     <input id="soundEnabled" type="checkbox" checked>
-    <span>Leisen Signalton zu Beginn der Vorwarnung abspielen</span>
+    <span>Shugo-Signaltöne abspielen</span>
   </label>
-  <p class="hint">Der Signalton wird pro Shugo-Start nur einmal abgespielt und kann hier ausgeschaltet werden. Das Shugo-Festival startet laut aktuellem Zeitplan jede volle Stunde. Die Anmeldung ist in den ersten drei Minuten offen. Während der Vorwarnung wird der Timer farblich hervorgehoben; in den letzten 30 Sekunden blinkt das Logo. Region und Vorwarnung gelten nur für diese Stream-Deck-Taste.</p>
+  <label for="soundStyle">Signalton
+    <select id="soundStyle">
+      <option value="soft">Sanft</option>
+      <option value="classic" selected>Klassisch</option>
+      <option value="bright">Hell</option>
+    </select>
+  </label>
+  <label for="soundVolume">
+    <span class="range-heading"><span>Lautstärke</span><output id="soundVolumeValue">40 %</output></span>
+    <input id="soundVolume" type="range" min="0" max="100" step="5" value="40">
+  </label>
+  <p class="hint">Der erste Ton ertönt beim Beginn der Vorwarnung; der zusätzliche Ton ist optional und kann zeitlich abweichen. Gleiche Zeitpunkte lösen nur einen Ton aus. Lautstärke 0 schaltet den Ton stumm. Das Festival startet laut Zeitplan jede volle Stunde; die Anmeldung ist in den ersten drei Minuten offen. In den letzten 30 Sekunden blinkt das Shugo-Logo. Einstellungen gelten nur für diese Taste.</p>
   <script>
     (() => {
       const client = SDPIComponents.streamDeckClient;
       const region = document.getElementById("region");
       const alertMinutes = document.getElementById("alertMinutes");
+      const secondAlertMinutes = document.getElementById("secondAlertMinutes");
       const soundEnabled = document.getElementById("soundEnabled");
+      const soundStyle = document.getElementById("soundStyle");
+      const soundVolume = document.getElementById("soundVolume");
+      const soundVolumeValue = document.getElementById("soundVolumeValue");
       let saveTimer;
+
+      function updateVolumeLabel() {
+        soundVolumeValue.value = `${soundVolume.value} %`;
+      }
 
       function applySettings(settings = {}) {
         region.value = settings.region || "eu";
         alertMinutes.value = String(settings.alertMinutes ?? 5);
+        secondAlertMinutes.value = String(settings.secondAlertMinutes ?? 1);
         soundEnabled.checked = settings.soundEnabled !== false;
+        soundStyle.value = settings.soundStyle || "classic";
+        soundVolume.value = String(settings.soundVolume ?? 40);
+        updateVolumeLabel();
       }
 
       async function saveSettings() {
         try {
-          await client.setSettings({ region: region.value, alertMinutes: Number(alertMinutes.value), soundEnabled: soundEnabled.checked });
+          await client.setSettings({
+            region: region.value,
+            alertMinutes: Number(alertMinutes.value),
+            secondAlertMinutes: Number(secondAlertMinutes.value),
+            soundEnabled: soundEnabled.checked,
+            soundStyle: soundStyle.value,
+            soundVolume: Number(soundVolume.value)
+          });
         } catch (error) {
           // Retry on the next selection change.
         }
       }
 
-      for (const control of [region, alertMinutes, soundEnabled]) {
+      for (const control of [region, alertMinutes, secondAlertMinutes, soundEnabled, soundStyle, soundVolume]) {
         control.addEventListener("change", () => {
           window.clearTimeout(saveTimer);
           saveTimer = window.setTimeout(saveSettings, 150);
         });
       }
+      soundVolume.addEventListener("input", updateVolumeLabel);
       client.didReceiveSettings.subscribe((event) => applySettings(event.payload?.settings || {}));
       client.getConnectionInfo().then((info) => applySettings(info.actionInfo?.payload?.settings || {}));
     })();

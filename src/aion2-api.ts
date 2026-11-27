@@ -50,19 +50,35 @@ function stripMarkup(value: string): string {
 }
 
 async function getJson<T>(url: URL): Promise<T> {
-	const response = await fetch(url, {
-		headers: {
-			Accept: "application/json",
-			"User-Agent": USER_AGENT,
-		},
-		signal: AbortSignal.timeout(15_000),
-	});
-	if (!response.ok) {
-		if (response.status === 404) throw new Error("Charakterprofil nicht gefunden oder noch nicht öffentlich.");
-		if (response.status === 429 || response.status === 503) throw new Error("AION 2 begrenzt gerade Anfragen. Bitte später erneut versuchen.");
-		throw new Error(`AION-2-API antwortet mit HTTP ${response.status}.`);
+	let response: Response;
+	try {
+		response = await fetch(url, {
+			headers: {
+				Accept: "application/json",
+				"User-Agent": USER_AGENT,
+			},
+			signal: AbortSignal.timeout(15_000),
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+			throw new Error("Zeitüberschreitung beim Laden des AION-2-Profils. Prüfe deine Internetverbindung und versuche es erneut.");
+		}
+		if (error instanceof TypeError) {
+			throw new Error("AION 2 ist gerade nicht erreichbar. Prüfe deine Internetverbindung und lade die Taste erneut.");
+		}
+		throw new Error("Das AION-2-Profil konnte nicht geladen werden. Bitte später erneut versuchen.");
 	}
-	return (await response.json()) as T;
+	if (!response.ok) {
+		if (response.status === 404) throw new Error("AION-2-Profil oder Suchdienst nicht gefunden. Prüfe Name, Region und Server; das Profil muss öffentlich sein.");
+		if (response.status === 429) throw new Error("AION 2 begrenzt gerade die Anfragen. Warte kurz und lade dann erneut.");
+		if (response.status === 503 || response.status >= 500) throw new Error(`Der AION-2-Dienst ist vorübergehend nicht verfügbar (HTTP ${response.status}). Bitte später erneut versuchen.`);
+		throw new Error(`AION 2 hat die Anfrage abgelehnt (HTTP ${response.status}). Prüfe Region und Einstellungen.`);
+	}
+	try {
+		return (await response.json()) as T;
+	} catch {
+		throw new Error("AION 2 hat eine ungültige Antwort gesendet. Bitte später erneut versuchen.");
+	}
 }
 
 function normalizeRegion(region: string): AionRegion {
@@ -74,21 +90,24 @@ async function lookupUncached(characterName: string, server: string, region: Aio
 	const searchUrl = new URL("https://api-search.plaync.com/aion2global/search/v2/character");
 	searchUrl.search = new URLSearchParams({ keyword: characterName, region, localeInfo: "en-US" }).toString();
 	const search = await getJson<SearchResponse>(searchUrl);
-	const exactMatches = (search.list ?? []).filter((result) => {
-		if (!result.name || !result.characterId || !result.serverId || !result.serverName) return false;
-		const sameName = stripMarkup(result.name).toLocaleLowerCase() === characterName.toLocaleLowerCase();
-		const sameServer = !server || result.serverName.toLocaleLowerCase() === server.toLocaleLowerCase();
-		return sameName && sameServer;
+	const nameMatches = (search.list ?? []).filter((result) => result.name && stripMarkup(result.name).toLocaleLowerCase() === characterName.toLocaleLowerCase());
+	const exactMatches = nameMatches.filter((result) => {
+		if (!result.characterId || !result.serverId || !result.serverName) return false;
+		return !server || result.serverName.toLocaleLowerCase() === server.toLocaleLowerCase();
 	});
 
 	if (exactMatches.length === 0) {
+		const availableServers = [...new Set(nameMatches.map((match) => match.serverName).filter((name): name is string => Boolean(name)))];
+		if (server && availableServers.length > 0) {
+			throw new Error(`„${characterName}“ wurde gefunden, aber nicht auf Server „${server}“. Verfügbare Server: ${availableServers.join(", ")}.`);
+		}
 		throw new Error(server
-			? `„${characterName}“ wurde auf ${server} (${region.toUpperCase()}) nicht gefunden.`
-			: `„${characterName}“ wurde in ${region.toUpperCase()} nicht gefunden.`);
+			? `Charakter „${characterName}“ wurde auf ${server} (${region.toUpperCase()}) nicht gefunden. Prüfe Schreibweise und Server; das Profil muss öffentlich sein.`
+			: `Charakter „${characterName}“ wurde in ${region.toUpperCase()} nicht gefunden. Prüfe Schreibweise und ob das Profil öffentlich ist.`);
 	}
 	if (exactMatches.length > 1) {
 		const servers = [...new Set(exactMatches.map((match) => match.serverName))].join(", ");
-		throw new Error(`Name mehrfach gefunden. Bitte den Server eintragen (${servers}).`);
+		throw new Error(`Der Name „${characterName}“ ist mehrfach vorhanden. Trage den Server ein: ${servers}.`);
 	}
 
 	const match = exactMatches[0];

@@ -1,5 +1,19 @@
 # Änderungsprotokoll
 
+## 0.2.7.0 — Charakterverlauf und Shugo-Erinnerungen
+
+- Combat-Power- und Item-Level-Änderungen erscheinen mit Richtungspfeil, Farbe und Differenz zur letzten erfolgreichen Aktualisierung.
+- Die Uhrzeit der letzten Aktualisierung ist auf der Charaktertaste und im Einstellungsbereich sichtbar.
+- Shugo-Erinnerungen bieten einen zweiten, optionalen Signalzeitpunkt sowie drei Klangstile und einstellbare Lautstärke.
+- Bei Profil-, Server-, Verbindungs- und AION-2-Dienstfehlern gibt es konkrete Hinweise auf der Taste und im Einstellungsbereich.
+
+### Aktualisieren
+
+1. [AION-2-Stats-0.2.7.0.streamDeckPlugin herunterladen](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases/download/v0.2.7.0/AION-2-Stats-0.2.7.0.streamDeckPlugin) und doppelklicken.
+2. Auf der Shugo-Taste können zweiter Hinweiszeitpunkt, Klangstil und Lautstärke angepasst werden.
+
+Vorhandene Charakter- und Regions-Einstellungen bleiben erhalten.
+
 ## 0.2.6.0 — Akustischer Shugo-Hinweis
 
 - Zu Beginn der gewählten Shugo-Vorwarnung ertönt einmalig ein leiser Signalton.
