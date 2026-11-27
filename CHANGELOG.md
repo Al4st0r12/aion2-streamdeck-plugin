@@ -10,7 +10,7 @@
 
 ### Aktualisieren
 
-1. Die Datei [AION-2-Stats-0.2.5.0.streamDeckPlugin](release/AION-2-Stats-0.2.5.0.streamDeckPlugin) herunterladen.
+1. Die Datei [AION-2-Stats-0.2.5.0.streamDeckPlugin](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases/download/v0.2.5.0/AION-2-Stats-0.2.5.0.streamDeckPlugin) herunterladen.
 2. Datei doppelklicken und die Aktualisierung in Stream Deck bestätigen.
 3. Eine vorhandene Shugo-Taste auswählen und Region sowie Vorwarnung im Einstellungsbereich festlegen.
 
