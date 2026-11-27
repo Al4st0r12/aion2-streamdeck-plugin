@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AION 2 Stats</title>
+  <script src="sdpi-components.js"></script>
+  <style>
+    :root { color-scheme: dark; font: 13px system-ui, sans-serif; }
+    body { margin: 0; padding: 16px; color: #e9edf3; background: #202124; }
+    label { display: block; margin: 0 0 14px; color: #bfc5cf; }
+    input, select { box-sizing: border-box; width: 100%; margin-top: 6px; padding: 8px 9px; border: 1px solid #4c5057; border-radius: 4px; color: #f5f6f8; background: #2b2d31; font: inherit; }
+    input:focus, select:focus { border-color: #57d5d2; outline: none; }
+    .hint { margin: -6px 0 14px; color: #c4cad4; font-size: 11px; line-height: 1.5; }
+    .status { min-height: 28px; padding-top: 2px; color: #57d5d2; font-size: 11px; line-height: 1.45; }
+    .status[data-state="pending"] { color: #e6c67a; }
+    .status[data-state="error"] { color: #ff8b8b; }
+  </style>
+</head>
+<body>
+  <label for="characterName">Charaktername
+    <input id="characterName" type="text" maxlength="40" autocomplete="off" placeholder="z. B. MeinChar">
+  </label>
+  <label for="region">Region
+    <select id="region">
+      <option value="eu">Europa</option>
+      <option value="nae">Nordamerika Ost</option>
+      <option value="naw">Nordamerika West</option>
+      <option value="la">Südamerika</option>
+      <option value="as">Asien</option>
+    </select>
+  </label>
+  <label for="server">Server (optional, hilft bei gleichen Namen)
+    <input id="server" type="text" maxlength="40" autocomplete="off" placeholder="z. B. Lumiel">
+  </label>
+  <label for="refreshMinutes">Aktualisierung
+    <select id="refreshMinutes">
+      <option value="1">Jede Minute</option>
+      <option value="5" selected>Alle 5 Minuten</option>
+      <option value="10">Alle 10 Minuten</option>
+      <option value="30">Alle 30 Minuten</option>
+    </select>
+  </label>
+  <p class="hint"><strong>Wichtig:</strong> Den Spielernamen in das Feld „Charaktername“ hier eintragen. Das Feld „Titel“ oben benennt nur die Taste. Name und Region werden automatisch gespeichert; danach wird das öffentliche Profil gesucht. Ein Tastendruck lädt die Werte sofort neu. Ein Charakterwechsel im Spiel wird derzeit nicht automatisch erkannt; die Taste zeigt den hier eingestellten Charakter.</p>
+  <div id="status" class="status" role="status">Bitte Charaktername und Region eintragen.</div>
+
+  <script>
+    (() => {
+      const client = SDPIComponents.streamDeckClient;
+      const fields = {
+        characterName: document.getElementById("characterName"),
+        region: document.getElementById("region"),
+        server: document.getElementById("server"),
+        refreshMinutes: document.getElementById("refreshMinutes"),
+      };
+      const status = document.getElementById("status");
+      let saveTimer;
+      let saveSequence = 0;
+      let acknowledgementTimer;
+
+      function setStatus(message, state = "") {
+        status.textContent = message;
+        status.dataset.state = state;
+      }
+
+      function currentSettings() {
+        return {
+          characterName: fields.characterName.value.trim(),
+          region: fields.region.value,
+          server: fields.server.value.trim(),
+          refreshMinutes: Number(fields.refreshMinutes.value) || 5,
+        };
+      }
+
+      function applySettings(settings = {}) {
+        const characterName = settings.characterName || "";
+        const region = settings.region || "eu";
+        const server = settings.server || "";
+        const refreshMinutes = String(settings.refreshMinutes || 5);
+        if (fields.characterName.value !== characterName) fields.characterName.value = characterName;
+        if (fields.region.value !== region) fields.region.value = region;
+        if (fields.server.value !== server) fields.server.value = server;
+        if (fields.refreshMinutes.value !== refreshMinutes) fields.refreshMinutes.value = refreshMinutes;
+        setStatus(characterName
+          ? `Gespeichert: ${characterName}. Profil wird geladen …`
+          : "Bitte den Namen im Feld „Charaktername“ eintragen; „Titel“ oben benennt nur die Taste.", characterName ? "pending" : "");
+      }
+      function saveSettings() {
+        const settings = currentSettings();
+        const sequence = ++saveSequence;
+        window.clearTimeout(acknowledgementTimer);
+        setStatus("Speichere in Stream Deck …", "pending");
+        acknowledgementTimer = window.setTimeout(() => {
+          if (sequence === saveSequence) {
+            setStatus("Stream Deck hat nicht bestätigt, dass die Eingaben gespeichert wurden.", "error");
+          }
+        }, 5000);
+        client.setSettings(settings).catch(() => {
+          if (sequence === saveSequence) {
+            window.clearTimeout(acknowledgementTimer);
+            setStatus("Speichern fehlgeschlagen. Bitte Taste erneut auswählen.", "error");
+          }
+        });
+      }
+      function scheduleSave() {
+        const name = fields.characterName.value.trim();
+        setStatus(name
+          ? `Eingabe erkannt: „${name}“. Speichere und suche Profil …`
+          : "Eingabe erkannt. Bitte den Namen im Feld „Charaktername“ eintragen.", "pending");
+        window.clearTimeout(saveTimer);
+        saveTimer = window.setTimeout(saveSettings, 350);
+      }
+
+      client.didReceiveSettings.subscribe((event) => applySettings(event.payload?.settings || {}));
+      client.sendToPropertyInspector.subscribe((event) => {
+        if (!event.payload || !event.payload.status) return;
+        window.clearTimeout(acknowledgementTimer);
+        const message = event.payload.status;
+        setStatus(message, /nicht gefunden|bitte|fehler|http \d+|begrenzt/i.test(message) ? "error" : "");
+      });
+      client.getConnectionInfo().then((info) => {
+        applySettings(info.actionInfo?.payload?.settings || {});
+      }).catch(() => setStatus("Verbindung zur Stream-Deck-App fehlgeschlagen.", "error"));
+
+      for (const field of Object.values(fields)) {
+        field.addEventListener("input", scheduleSave);
+        field.addEventListener("change", scheduleSave);
+      }
+    })();
+  </script>
+</body>
+</html>
+
+
+

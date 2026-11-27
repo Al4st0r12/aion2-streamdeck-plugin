@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Actions": [
+    {
+      "Icon": "imgs/action",
+      "Name": "AION 2 CP & Gearscore",
+      "PropertyInspectorPath": "ui/settings.html",
+      "States": [
+        {
+          "Image": "imgs/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Zeigt Kampfkraft, Item-Level und das passende Klassenwappen. Drücken zum Aktualisieren.",
+      "UUID": "com.codex.aion2stats.character"
+    },
+    {
+      "Icon": "imgs/action",
+      "Name": "Nächstes Shugo-Festival",
+      "PropertyInspectorPath": "ui/shugo-settings.html",
+      "States": [
+        {
+          "Image": "imgs/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Zeigt den Countdown über dem offiziellen Shugo-Festa-Logo. Das Logo blinkt 30 Sekunden vor Start.",
+      "UUID": "com.codex.aion2stats.shugo"
+    }
+  ],
+  "Author": "Al4st0r12",
+  "Category": "AION 2 Stats",
+  "CategoryIcon": "imgs/category",
+  "CodePath": "bin/plugin.js",
+  "Description": "Zeigt Combat Power und Gearscore deines AION-2-Charakters sowie den Countdown zum nächsten Shugo-Festival.",
+  "Icon": "imgs/plugin",
+  "Name": "AION 2 Stats",
+  "Nodejs": {
+    "Version": "24"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    },
+    {
+      "Platform": "mac",
+      "MinimumVersion": "13"
+    }
+  ],
+  "SDKVersion": 3,
+  "Software": {
+    "MinimumVersion": "7.1"
+  },
+  "UUID": "com.codex.aion2stats",
+  "Version": "0.2.4.0"
+}

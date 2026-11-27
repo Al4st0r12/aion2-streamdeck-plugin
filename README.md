@@ -1,5 +1,7 @@
 # AION 2 Stats für Elgato Stream Deck
 
+![AION 2 Stats Logo](assets/brand/plugin-logo.png)
+
 ![AION 2 Stats Banner](assets/brand/plugin-banner.png)
 
 Ein Stream-Deck-Plugin mit zwei Tasten für AION 2:
@@ -29,4 +31,3 @@ Weitere Befehle: `npm run build` kompiliert das Plugin; `npm run watch` baut bei
 Das Plugin liest ausschließlich öffentliche Charakterprofile der offiziellen AION-2-Webseite und benötigt keinen Login oder API-Schlüssel. Es greift nicht auf den Spielprozess, Speicher oder Netzwerkverkehr des Spiels zu. Nicht gelistete oder nicht öffentliche Charaktere können nicht angezeigt werden. Die Endpunkte sind nicht als stabile Entwickler-API dokumentiert und können sich ändern.
 
 Der angezeigte Gearscore kommt aus dem offiziellen Profilfeld **Item Level**. Die Aktualisierung hängt davon ab, wann NCSOFT das öffentliche Charakterprofil aktualisiert. Der Shugo-Timer folgt dem veröffentlichten stündlichen Zeitplan; die Anmeldung ist während der ersten drei Minuten offen. Das im Timer verwendete Shugo-Festa-Eingangsicon stammt aus dem vom Nutzer bereitgestellten Spielbild.
-
