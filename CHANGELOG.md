@@ -1,8 +1,18 @@
 # Änderungsprotokoll
 
+## 0.2.8.0 — Verlauf bleibt gespeichert
+
+- Der letzte Combat-Power- und Item-Level-Stand sowie die Aktualisierungszeit bleiben je Charaktertaste auch nach einem Neustart von Stream Deck erhalten.
+- README ergänzt um den Link zur [BBAION-Website](https://bbaion.nightclubcity.de/).
+
+### Aktualisieren
+
+1. [AION-2-Stats-0.2.8.0.streamDeckPlugin herunterladen](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases/download/v0.2.8.0/AION-2-Stats-0.2.8.0.streamDeckPlugin) und doppelklicken.
+2. Die Änderungspfeile vergleichen Werte weiterhin mit dem zuletzt erfolgreich gespeicherten Stand.
+
 ## 0.2.7.0 — Charakterverlauf und Shugo-Erinnerungen
 
-- Combat-Power- und Item-Level-Änderungen erscheinen mit Richtungspfeil, Farbe und Differenz zur letzten erfolgreichen Aktualisierung.
+- Combat-Power- und Item-Level-Änderungen erscheinen mit Richtungspfeil, Farbe und Differenz zur letzten erfolgreichen Aktualisierung. Der Verlauf bleibt pro Taste auch nach einem Stream-Deck-Neustart gespeichert.
 - Die Uhrzeit der letzten Aktualisierung ist auf der Charaktertaste und im Einstellungsbereich sichtbar.
 - Shugo-Erinnerungen bieten einen zweiten, optionalen Signalzeitpunkt sowie drei Klangstile und einstellbare Lautstärke.
 - Bei Profil-, Server-, Verbindungs- und AION-2-Dienstfehlern gibt es konkrete Hinweise auf der Taste und im Einstellungsbereich.

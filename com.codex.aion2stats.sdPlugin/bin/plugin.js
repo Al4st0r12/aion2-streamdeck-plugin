@@ -8645,6 +8645,20 @@ const FIRST_RUN_SETTINGS = {
     refreshMinutes: 5,
 };
 const instances$1 = new Map();
+function profileSettingsKey(settings) {
+    return `${(settings.region || "eu").toLocaleLowerCase()}:${(settings.server || "").trim().toLocaleLowerCase()}:${(settings.characterName || "").trim().toLocaleLowerCase()}`;
+}
+function savedHistory(settings) {
+    if (settings.lastCharacterKey !== profileSettingsKey(settings)
+        || !Number.isFinite(settings.lastCombatPower)
+        || !Number.isFinite(settings.lastGearScore))
+        return {};
+    const lastUpdatedAt = settings.lastUpdatedAt ? new Date(settings.lastUpdatedAt) : undefined;
+    return {
+        lastStats: { combatPower: Number(settings.lastCombatPower), gearScore: Number(settings.lastGearScore) },
+        lastUpdatedAt: lastUpdatedAt && Number.isFinite(lastUpdatedAt.getTime()) ? lastUpdatedAt : undefined,
+    };
+}
 function escapeXml$1(value) {
     return value.replace(/[<>&"']/g, (character) => ({
         "<": "&lt;",
@@ -8791,6 +8805,20 @@ async function refresh(action, settings) {
         if (current) {
             current.lastStats = data;
             current.lastUpdatedAt = updatedAt;
+            current.settings = {
+                ...current.settings,
+                ...settings,
+                lastCharacterKey: profileSettingsKey(settings),
+                lastCombatPower: data.combatPower,
+                lastGearScore: data.gearScore,
+                lastUpdatedAt: updatedAt.toISOString(),
+            };
+            try {
+                await action.setSettings(current.settings);
+            }
+            catch (error) {
+                streamDeck.logger.warn(`Werteverlauf konnte nicht gespeichert werden: ${String(error)}`);
+            }
         }
         await streamDeck.ui.sendToPropertyInspector({ status: `Aktualisiert: ${data.name} · ${data.serverName} · ${updatedAt.toLocaleString("de-DE")}` });
     }
@@ -8850,7 +8878,11 @@ let CharacterStatsAction = (() => {
                 void action.setSettings(settings);
             }
             setImage(action, settings.characterName?.trim() ? placeholderSvg("Lade Charakter …") : placeholderSvg("Name einstellen"));
-            instances$1.set(action.id, { action, settings });
+            instances$1.set(action.id, {
+                action,
+                settings,
+                ...savedHistory(settings),
+            });
             if (settings.characterName?.trim())
                 void refresh(action, settings);
             updateInterval(action.id);
@@ -8869,15 +8901,24 @@ let CharacterStatsAction = (() => {
             const settings = ev.payload.settings ?? {};
             let instance = instances$1.get(action.id);
             if (!instance) {
-                instance = { action, settings };
+                instance = { action, settings, ...savedHistory(settings) };
                 instances$1.set(action.id, instance);
             }
             else {
-                if (!settingsMatch(instance.settings, settings)) {
+                const profileChanged = !settingsMatch(instance.settings, settings);
+                const refreshIntervalChanged = Number(instance.settings.refreshMinutes ?? 5) !== Number(settings.refreshMinutes ?? 5);
+                instance.settings = settings;
+                const history = savedHistory(settings);
+                if (history.lastStats) {
+                    instance.lastStats = history.lastStats;
+                    instance.lastUpdatedAt = history.lastUpdatedAt;
+                }
+                else if (profileChanged) {
                     instance.lastStats = undefined;
                     instance.lastUpdatedAt = undefined;
                 }
-                instance.settings = settings;
+                if (!profileChanged && !refreshIntervalChanged)
+                    return;
             }
             setImage(action, settings.characterName?.trim() ? placeholderSvg("Lade Charakter …") : placeholderSvg("Name einstellen"));
             updateInterval(action.id);

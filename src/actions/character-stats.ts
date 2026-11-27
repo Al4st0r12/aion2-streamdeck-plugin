@@ -16,6 +16,10 @@ type Settings = {
 	region?: string;
 	server?: string;
 	refreshMinutes?: number;
+	lastCharacterKey?: string;
+	lastCombatPower?: number;
+	lastGearScore?: number;
+	lastUpdatedAt?: string;
 };
 
 type KeyInstance = StreamDeckKeyAction<Settings>;
@@ -24,7 +28,7 @@ type KeyInstanceState = {
 	settings: Settings;
 	interval?: NodeJS.Timeout;
 	debounce?: NodeJS.Timeout;
-	lastStats?: CharacterStats;
+	lastStats?: Pick<CharacterStats, "combatPower" | "gearScore">;
 	lastUpdatedAt?: Date;
 };
 // The character currently visible during setup, used only for a new/blank key.
@@ -36,6 +40,21 @@ const FIRST_RUN_SETTINGS: Settings = {
 };
 
 const instances = new Map<string, KeyInstanceState>();
+
+function profileSettingsKey(settings: Settings): string {
+	return `${(settings.region || "eu").toLocaleLowerCase()}:${(settings.server || "").trim().toLocaleLowerCase()}:${(settings.characterName || "").trim().toLocaleLowerCase()}`;
+}
+
+function savedHistory(settings: Settings): { lastStats?: Pick<CharacterStats, "combatPower" | "gearScore">; lastUpdatedAt?: Date } {
+	if (settings.lastCharacterKey !== profileSettingsKey(settings)
+		|| !Number.isFinite(settings.lastCombatPower)
+		|| !Number.isFinite(settings.lastGearScore)) return {};
+	const lastUpdatedAt = settings.lastUpdatedAt ? new Date(settings.lastUpdatedAt) : undefined;
+	return {
+		lastStats: { combatPower: Number(settings.lastCombatPower), gearScore: Number(settings.lastGearScore) },
+		lastUpdatedAt: lastUpdatedAt && Number.isFinite(lastUpdatedAt.getTime()) ? lastUpdatedAt : undefined,
+	};
+}
 
 function escapeXml(value: string): string {
 	return value.replace(/[<>&"']/g, (character) => ({
@@ -100,7 +119,7 @@ function statChange(current: number, previous?: number): { label: string; color:
 		: { label: `▼ -${formatNumber(Math.abs(difference))}`, color: "#ff8888" };
 }
 
-function statsSvg(data: CharacterStats, previous?: CharacterStats, lastUpdatedAt?: Date): string {
+function statsSvg(data: CharacterStats, previous?: Pick<CharacterStats, "combatPower" | "gearScore">, lastUpdatedAt?: Date): string {
 	const name = escapeXml(data.name.length > 13 ? `${data.name.slice(0, 12)}…` : data.name);
 	const cp = formatNumber(data.combatPower);
 	const gs = formatNumber(data.gearScore);
@@ -190,6 +209,19 @@ async function refresh(action: KeyInstance, settings: Settings): Promise<void> {
 		if (current) {
 			current.lastStats = data;
 			current.lastUpdatedAt = updatedAt;
+			current.settings = {
+				...current.settings,
+				...settings,
+				lastCharacterKey: profileSettingsKey(settings),
+				lastCombatPower: data.combatPower,
+				lastGearScore: data.gearScore,
+				lastUpdatedAt: updatedAt.toISOString(),
+			};
+			try {
+				await action.setSettings(current.settings);
+			} catch (error) {
+				streamDeck.logger.warn(`Werteverlauf konnte nicht gespeichert werden: ${String(error)}`);
+			}
 		}
 		await streamDeck.ui.sendToPropertyInspector({ status: `Aktualisiert: ${data.name} · ${data.serverName} · ${updatedAt.toLocaleString("de-DE")}` });
 	} catch (error) {
@@ -234,7 +266,11 @@ export class CharacterStatsAction extends SingletonAction<Settings> {
 			void action.setSettings(settings);
 		}
 		setImage(action, settings.characterName?.trim() ? placeholderSvg("Lade Charakter …") : placeholderSvg("Name einstellen"));
-		instances.set(action.id, { action, settings });
+		instances.set(action.id, {
+			action,
+			settings,
+			...savedHistory(settings),
+		});
 		if (settings.characterName?.trim()) void refresh(action, settings);
 		updateInterval(action.id);
 	}
@@ -252,14 +288,21 @@ export class CharacterStatsAction extends SingletonAction<Settings> {
 		const settings = ev.payload.settings ?? {};
 		let instance = instances.get(action.id);
 		if (!instance) {
-			instance = { action, settings };
+			instance = { action, settings, ...savedHistory(settings) };
 			instances.set(action.id, instance);
 		} else {
-			if (!settingsMatch(instance.settings, settings)) {
+			const profileChanged = !settingsMatch(instance.settings, settings);
+			const refreshIntervalChanged = Number(instance.settings.refreshMinutes ?? 5) !== Number(settings.refreshMinutes ?? 5);
+			instance.settings = settings;
+			const history = savedHistory(settings);
+			if (history.lastStats) {
+				instance.lastStats = history.lastStats;
+				instance.lastUpdatedAt = history.lastUpdatedAt;
+			} else if (profileChanged) {
 				instance.lastStats = undefined;
 				instance.lastUpdatedAt = undefined;
 			}
-			instance.settings = settings;
+			if (!profileChanged && !refreshIntervalChanged) return;
 		}
 		setImage(action, settings.characterName?.trim() ? placeholderSvg("Lade Charakter …") : placeholderSvg("Name einstellen"));
 		updateInterval(action.id);

@@ -57,6 +57,7 @@
       let saveTimer;
       let saveSequence = 0;
       let acknowledgementTimer;
+      let historySettings = {};
 
       function setStatus(message, state = "") {
         status.textContent = message;
@@ -65,6 +66,7 @@
 
       function currentSettings() {
         return {
+          ...historySettings,
           characterName: fields.characterName.value.trim(),
           region: fields.region.value,
           server: fields.server.value.trim(),
@@ -73,6 +75,12 @@
       }
 
       function applySettings(settings = {}) {
+        historySettings = {
+          lastCharacterKey: settings.lastCharacterKey,
+          lastCombatPower: settings.lastCombatPower,
+          lastGearScore: settings.lastGearScore,
+          lastUpdatedAt: settings.lastUpdatedAt,
+        };
         const characterName = settings.characterName || "";
         const region = settings.region || "eu";
         const server = settings.server || "";
