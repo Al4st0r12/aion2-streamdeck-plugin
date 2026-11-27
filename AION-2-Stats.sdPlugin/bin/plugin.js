@@ -8649,13 +8649,29 @@ function profileSettingsKey(settings) {
     return `${(settings.region || "eu").toLocaleLowerCase()}:${(settings.server || "").trim().toLocaleLowerCase()}:${(settings.characterName || "").trim().toLocaleLowerCase()}`;
 }
 function savedHistory(settings) {
-    if (settings.lastCharacterKey !== profileSettingsKey(settings)
-        || !Number.isFinite(settings.lastCombatPower)
-        || !Number.isFinite(settings.lastGearScore))
+    if (settings.lastCharacterKey !== profileSettingsKey(settings))
+        return {};
+    const stored = settings.lastCharacterStats;
+    let lastStats;
+    if (stored && Number.isFinite(stored.combatPower) && Number.isFinite(stored.gearScore)) {
+        lastStats = stored;
+    }
+    else if (Number.isFinite(settings.lastCombatPower) && Number.isFinite(settings.lastGearScore)) {
+        lastStats = {
+            name: settings.characterName?.trim() || "AION 2",
+            region: (settings.region || "eu"),
+            serverName: settings.server?.trim() || "—",
+            className: "AION 2",
+            level: 0,
+            combatPower: Number(settings.lastCombatPower),
+            gearScore: Number(settings.lastGearScore),
+        };
+    }
+    if (!lastStats)
         return {};
     const lastUpdatedAt = settings.lastUpdatedAt ? new Date(settings.lastUpdatedAt) : undefined;
     return {
-        lastStats: { combatPower: Number(settings.lastCombatPower), gearScore: Number(settings.lastGearScore) },
+        lastStats,
         lastUpdatedAt: lastUpdatedAt && Number.isFinite(lastUpdatedAt.getTime()) ? lastUpdatedAt : undefined,
     };
 }
@@ -8709,7 +8725,11 @@ function updateTime(date) {
         return "--:--";
     return new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(date);
 }
-function statChange(current, previous) {
+function statChange(current, previous, connection) {
+    if (connection === "offline")
+        return { label: "ALT", color: "#ff8888" };
+    if (connection === "checking")
+        return { label: "…", color: "#e6c67a" };
     if (previous === undefined)
         return { label: "NEU", color: "#8194a1" };
     const difference = current - previous;
@@ -8719,15 +8739,17 @@ function statChange(current, previous) {
         ? { label: `▲ +${formatNumber(difference)}`, color: "#8df0a4" }
         : { label: `▼ -${formatNumber(Math.abs(difference))}`, color: "#ff8888" };
 }
-function statsSvg(data, previous, lastUpdatedAt) {
+function statsSvg(data, previous, lastUpdatedAt, connection = "online") {
     const name = escapeXml$1(data.name.length > 13 ? `${data.name.slice(0, 12)}…` : data.name);
     const cp = formatNumber(data.combatPower);
     const gs = formatNumber(data.gearScore);
-    const cpChange = statChange(data.combatPower, previous?.combatPower);
-    const gearChange = statChange(data.gearScore, previous?.gearScore);
+    const cpChange = statChange(data.combatPower, previous?.combatPower, connection);
+    const gearChange = statChange(data.gearScore, previous?.gearScore, connection);
     const classData = classInfo(data.className);
-    const meta = escapeXml$1(`${classData.label} · LV ${data.level}`);
+    const meta = escapeXml$1(data.level > 0 ? `${classData.label} · LV ${data.level}` : "LETZTER GESPEICHERTER STAND");
     const server = escapeXml$1(data.serverName.toLocaleUpperCase());
+    const connectionLabel = connection === "online" ? "ONLINE" : connection === "offline" ? "OFFLINE" : "PRÜFE";
+    const connectionColor = connection === "online" ? "#8df0a4" : connection === "offline" ? "#ff8888" : "#e6c67a";
     const classIcon = classData.icon ? iconData(classData.icon) : "";
     const classBadge = classIcon
         ? `<image x="8" y="8" width="34" height="34" href="${classIcon}" preserveAspectRatio="xMidYMid meet"/>`
@@ -8746,7 +8768,7 @@ function statsSvg(data, previous, lastUpdatedAt) {
 <path d="M8 52h128v40H8zM8 100h128v36H8z" fill="#fff" fill-opacity=".025"/>
 ${classBadge}
 <text x="47" y="15" fill="#78f2fb" font-family="Arial,sans-serif" font-size="7" font-weight="700" letter-spacing="1.4">AION 2</text>
-<text x="136" y="15" fill="#a8bac4" font-family="Arial,sans-serif" font-size="6.4" font-weight="700" text-anchor="end">AKT ${updateTime(lastUpdatedAt)}</text>
+<text x="136" y="15" fill="${connectionColor}" font-family="Arial,sans-serif" font-size="5.8" font-weight="700" text-anchor="end">${connectionLabel} ${updateTime(lastUpdatedAt)}</text>
 <text x="47" y="30" fill="#fff7e8" font-family="Arial,sans-serif" font-size="12.5" font-weight="700">${name}</text>
 <text x="47" y="42" fill="#a8bac4" font-family="Arial,sans-serif" font-size="7.4" font-weight="700" letter-spacing=".35">${meta}</text>
 <image x="10" y="55" width="31" height="31" href="${powerIcon}" preserveAspectRatio="xMidYMid meet"/>
@@ -8795,16 +8817,23 @@ function settingsMatch(first, second) {
     return first.characterName === second.characterName && first.region === second.region && first.server === second.server;
 }
 async function refresh(action, settings) {
+    const initial = instances$1.get(action.id);
+    if (initial && settingsMatch(initial.settings, settings)) {
+        initial.connection = "checking";
+        if (initial.lastStats)
+            setImage(action, statsSvg(initial.lastStats, undefined, initial.lastUpdatedAt, "checking"));
+    }
     try {
         const data = await lookupCharacter(settings.characterName ?? "", settings.server ?? "", settings.region ?? "eu");
         const current = instances$1.get(action.id);
         if (current && !settingsMatch(current.settings, settings))
             return;
         const updatedAt = new Date();
-        setImage(action, statsSvg(data, current?.lastStats, updatedAt));
+        setImage(action, statsSvg(data, current?.lastStats, updatedAt, "online"));
         if (current) {
             current.lastStats = data;
             current.lastUpdatedAt = updatedAt;
+            current.connection = "online";
             current.settings = {
                 ...current.settings,
                 ...settings,
@@ -8812,6 +8841,7 @@ async function refresh(action, settings) {
                 lastCombatPower: data.combatPower,
                 lastGearScore: data.gearScore,
                 lastUpdatedAt: updatedAt.toISOString(),
+                lastCharacterStats: data,
             };
             try {
                 await action.setSettings(current.settings);
@@ -8820,7 +8850,7 @@ async function refresh(action, settings) {
                 streamDeck.logger.warn(`Werteverlauf konnte nicht gespeichert werden: ${String(error)}`);
             }
         }
-        await streamDeck.ui.sendToPropertyInspector({ status: `Aktualisiert: ${data.name} · ${data.serverName} · ${updatedAt.toLocaleString("de-DE")}` });
+        await streamDeck.ui.sendToPropertyInspector({ status: `Verbindung online · Aktualisiert: ${data.name} · ${data.serverName} · ${updatedAt.toLocaleString("de-DE")}` });
     }
     catch (error) {
         const current = instances$1.get(action.id);
@@ -8829,8 +8859,16 @@ async function refresh(action, settings) {
         const message = error instanceof Error ? error.message : "Unbekannter Fehler beim Laden.";
         const display = explainError(error);
         const lastSuccess = current?.lastUpdatedAt ? `Letzter Erfolg ${updateTime(current.lastUpdatedAt)}` : "Noch keine erfolgreichen Daten";
-        setImage(action, placeholderSvg(display.title, display.hint, lastSuccess));
-        await streamDeck.ui.sendToPropertyInspector({ status: `Fehler: ${message} · ${lastSuccess}` });
+        if (current)
+            current.connection = "offline";
+        if (current?.lastStats) {
+            setImage(action, statsSvg(current.lastStats, undefined, current.lastUpdatedAt, "offline"));
+            await streamDeck.ui.sendToPropertyInspector({ status: `Verbindung fehlgeschlagen: ${message} · Zeige gespeicherte Werte (${lastSuccess}).` });
+        }
+        else {
+            setImage(action, placeholderSvg(display.title, display.hint, lastSuccess));
+            await streamDeck.ui.sendToPropertyInspector({ status: `Verbindung fehlgeschlagen: ${message} · ${lastSuccess}` });
+        }
         streamDeck.logger.warn(`AION 2 profile lookup failed: ${message}`);
     }
 }
@@ -8877,12 +8915,18 @@ let CharacterStatsAction = (() => {
                 };
                 void action.setSettings(settings);
             }
-            setImage(action, settings.characterName?.trim() ? placeholderSvg("Lade Charakter …") : placeholderSvg("Name einstellen"));
-            instances$1.set(action.id, {
+            const history = savedHistory(settings);
+            const instance = {
                 action,
                 settings,
-                ...savedHistory(settings),
-            });
+                connection: "checking",
+                ...history,
+            };
+            instances$1.set(action.id, instance);
+            if (instance.lastStats)
+                setImage(action, statsSvg(instance.lastStats, undefined, instance.lastUpdatedAt, "checking"));
+            else
+                setImage(action, settings.characterName?.trim() ? placeholderSvg("Verbinde …", "Profil wird geladen") : placeholderSvg("Name einstellen"));
             if (settings.characterName?.trim())
                 void refresh(action, settings);
             updateInterval(action.id);
@@ -8901,7 +8945,7 @@ let CharacterStatsAction = (() => {
             const settings = ev.payload.settings ?? {};
             let instance = instances$1.get(action.id);
             if (!instance) {
-                instance = { action, settings, ...savedHistory(settings) };
+                instance = { action, settings, connection: "checking", ...savedHistory(settings) };
                 instances$1.set(action.id, instance);
             }
             else {
@@ -8909,18 +8953,22 @@ let CharacterStatsAction = (() => {
                 const refreshIntervalChanged = Number(instance.settings.refreshMinutes ?? 5) !== Number(settings.refreshMinutes ?? 5);
                 instance.settings = settings;
                 const history = savedHistory(settings);
-                if (history.lastStats) {
+                if (profileChanged) {
                     instance.lastStats = history.lastStats;
                     instance.lastUpdatedAt = history.lastUpdatedAt;
+                    instance.connection = "checking";
                 }
-                else if (profileChanged) {
-                    instance.lastStats = undefined;
-                    instance.lastUpdatedAt = undefined;
+                else if (history.lastStats) {
+                    instance.lastStats = history.lastStats;
+                    instance.lastUpdatedAt = history.lastUpdatedAt;
                 }
                 if (!profileChanged && !refreshIntervalChanged)
                     return;
             }
-            setImage(action, settings.characterName?.trim() ? placeholderSvg("Lade Charakter …") : placeholderSvg("Name einstellen"));
+            if (instance.lastStats)
+                setImage(action, statsSvg(instance.lastStats, undefined, instance.lastUpdatedAt, "checking"));
+            else
+                setImage(action, settings.characterName?.trim() ? placeholderSvg("Verbinde …", "Profil wird geladen") : placeholderSvg("Name einstellen"));
             updateInterval(action.id);
             if (settings.characterName?.trim()) {
                 void streamDeck.ui.sendToPropertyInspector({ status: `Einstellungen gespeichert. Suche „${settings.characterName.trim()}“ …` });

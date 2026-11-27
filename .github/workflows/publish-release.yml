@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - com.codex.aion2stats.sdPlugin/manifest.json
+      - AION-2-Stats.sdPlugin/manifest.json
 
 permissions:
   contents: write
@@ -32,7 +32,7 @@ jobs:
       - name: Read the plugin version
         id: version
         run: |
-          version=$(node -p 'JSON.parse(require("node:fs").readFileSync("com.codex.aion2stats.sdPlugin/manifest.json", "utf8")).Version')
+          version=$(node -p 'JSON.parse(require("node:fs").readFileSync("AION-2-Stats.sdPlugin/manifest.json", "utf8")).Version')
           echo "value=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Create the GitHub release and attach the installer
@@ -46,4 +46,3 @@ jobs:
           --title "AION 2 Stats v${VERSION}"
           --notes-file "release-notes/v${VERSION}.md"
           --target "$GITHUB_SHA"
-

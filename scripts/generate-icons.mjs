@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { deflateSync } from "node:zlib";
 
-const outputDirectory = new URL("../com.codex.aion2stats.sdPlugin/imgs/", import.meta.url);
+const outputDirectory = new URL("../AION-2-Stats.sdPlugin/imgs/", import.meta.url);
 await mkdir(outputDirectory, { recursive: true });
 
 function crc32(buffer) {

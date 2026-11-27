@@ -5,7 +5,7 @@ import typescript from "@rollup/plugin-typescript";
 export default {
 	input: "src/plugin.ts",
 	output: {
-		file: "com.codex.aion2stats.sdPlugin/bin/plugin.js",
+		file: "AION-2-Stats.sdPlugin/bin/plugin.js",
 		format: "cjs",
 		sourcemap: true,
 	},

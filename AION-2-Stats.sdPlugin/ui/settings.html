@@ -80,6 +80,7 @@
           lastCombatPower: settings.lastCombatPower,
           lastGearScore: settings.lastGearScore,
           lastUpdatedAt: settings.lastUpdatedAt,
+          lastCharacterStats: settings.lastCharacterStats,
         };
         const characterName = settings.characterName || "";
         const region = settings.region || "eu";
@@ -124,7 +125,7 @@
         if (!event.payload || !event.payload.status) return;
         window.clearTimeout(acknowledgementTimer);
         const message = event.payload.status;
-        setStatus(message, /nicht gefunden|bitte|fehler|http \d+|begrenzt/i.test(message) ? "error" : "");
+        setStatus(message, /nicht gefunden|bitte|fehler|fehlgeschlagen|verbindung|offline|http \d+|begrenzt|nicht verfügbar|timeout|internet/i.test(message) ? "error" : "");
       });
       client.getConnectionInfo().then((info) => {
         applySettings(info.actionInfo?.payload?.settings || {});

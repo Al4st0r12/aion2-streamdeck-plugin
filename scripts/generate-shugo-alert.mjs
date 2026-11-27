@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const outputDirectory = path.join(projectDirectory, "com.codex.aion2stats.sdPlugin", "imgs", "aion2");
+const outputDirectory = path.join(projectDirectory, "AION-2-Stats.sdPlugin", "imgs", "aion2");
 const sampleRate = 22_050;
 const tones = {
 	soft: { notes: [659, 784], noteDuration: 0.19 },

@@ -11,7 +11,7 @@
           "ShowTitle": false
         }
       ],
-      "Tooltip": "Zeigt Kampfkraft, Item-Level, Änderungen und den Zeitpunkt der letzten Aktualisierung.",
+      "Tooltip": "Zeigt Kampfkraft, Item-Level, Änderungswerte, Verbindungsstatus und letzte Aktualisierung.",
       "UUID": "com.codex.aion2stats.character"
     },
     {
@@ -53,5 +53,5 @@
     "MinimumVersion": "7.1"
   },
   "UUID": "com.codex.aion2stats",
-  "Version": "0.2.8.0"
+  "Version": "0.2.9.0"
 }

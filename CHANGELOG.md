@@ -1,5 +1,17 @@
 # Änderungsprotokoll
 
+## 0.2.9.0 — Verbindungsstatus und Offline-Werte
+
+- Bei erfolgreicher Abfrage zeigt die Charaktertaste „ONLINE“ mit Aktualisierungszeit.
+- Bei API- oder Verbindungsfehlern bleiben die letzten gespeicherten Charakterwerte auf der Taste sichtbar und werden mit „OFFLINE“ sowie „ALT“ markiert.
+- Beim erneuten Laden wird der Status „PRÜFE“ angezeigt; erfolgreiche Aktualisierungen schalten ihn zurück auf „ONLINE“.
+- GitHub-Quellordner in `AION-2-Stats.sdPlugin` umbenannt; die Stream-Deck-Kennung bleibt unverändert.
+
+### Aktualisieren
+
+1. [AION-2-Stats-0.2.9.0.streamDeckPlugin herunterladen](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases/download/v0.2.9.0/AION-2-Stats-0.2.9.0.streamDeckPlugin) und doppelklicken.
+2. Bei einem Ausfall bleiben die letzten bekannten Werte erhalten. Sobald eine Abfrage wieder gelingt, wechselt die Taste zurück zu „ONLINE“.
+
 ## 0.2.8.0 — Verlauf bleibt gespeichert
 
 - Der letzte Combat-Power- und Item-Level-Stand sowie die Aktualisierungszeit bleiben je Charaktertaste auch nach einem Neustart von Stream Deck erhalten.

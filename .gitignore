@@ -1,4 +1,4 @@
 node_modules/
 dist/
 *.log
-com.codex.aion2stats.sdPlugin/imgs/aion2/shugo-alert-*.wav
+AION-2-Stats.sdPlugin/imgs/aion2/shugo-alert-*.wav
