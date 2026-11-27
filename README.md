@@ -4,7 +4,7 @@
 
 ![AION 2 Stats Banner](assets/brand/plugin-banner.png)
 
-**Aktuelle Version: 0.2.5.0** · [Änderungen ansehen](CHANGELOG.md)
+**Aktuelle Version: 0.2.5.0** · [Änderungen ansehen](CHANGELOG.md) · [Ältere Versionen herunterladen](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases)
 
 Ein Stream-Deck-Plugin mit zwei Tasten für AION 2:
 
