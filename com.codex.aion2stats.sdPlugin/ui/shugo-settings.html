@@ -10,6 +10,8 @@
     body { margin: 0; padding: 16px; color: #e9edf3; background: #202124; }
     label { display: block; margin: 0 0 14px; color: #bfc5cf; }
     select { box-sizing: border-box; width: 100%; margin-top: 6px; padding: 8px 9px; border: 1px solid #4c5057; border-radius: 4px; color: #f5f6f8; background: #2b2d31; font: inherit; }
+    .toggle { display: flex; align-items: flex-start; gap: 9px; line-height: 1.45; }
+    .toggle input { margin: 2px 0 0; accent-color: #e6c67a; }
     .hint { color: #c4cad4; font-size: 11px; line-height: 1.5; }
   </style>
 </head>
@@ -32,28 +34,34 @@
       <option value="10">10 Minuten</option>
     </select>
   </label>
-  <p class="hint">Das Shugo-Festival startet laut aktuellem Zeitplan jede volle Stunde. Die Anmeldung ist in den ersten drei Minuten offen. Die Vorwarnung hebt den Timer im gewählten Zeitraum farblich hervor. In den letzten 30 Sekunden blinkt das Shugo-Logo immer. Region und Vorwarnung gelten nur für diese Stream-Deck-Taste.</p>
+  <label class="toggle" for="soundEnabled">
+    <input id="soundEnabled" type="checkbox" checked>
+    <span>Leisen Signalton zu Beginn der Vorwarnung abspielen</span>
+  </label>
+  <p class="hint">Der Signalton wird pro Shugo-Start nur einmal abgespielt und kann hier ausgeschaltet werden. Das Shugo-Festival startet laut aktuellem Zeitplan jede volle Stunde. Die Anmeldung ist in den ersten drei Minuten offen. Während der Vorwarnung wird der Timer farblich hervorgehoben; in den letzten 30 Sekunden blinkt das Logo. Region und Vorwarnung gelten nur für diese Stream-Deck-Taste.</p>
   <script>
     (() => {
       const client = SDPIComponents.streamDeckClient;
       const region = document.getElementById("region");
       const alertMinutes = document.getElementById("alertMinutes");
+      const soundEnabled = document.getElementById("soundEnabled");
       let saveTimer;
 
       function applySettings(settings = {}) {
         region.value = settings.region || "eu";
         alertMinutes.value = String(settings.alertMinutes ?? 5);
+        soundEnabled.checked = settings.soundEnabled !== false;
       }
 
       async function saveSettings() {
         try {
-          await client.setSettings({ region: region.value, alertMinutes: Number(alertMinutes.value) });
+          await client.setSettings({ region: region.value, alertMinutes: Number(alertMinutes.value), soundEnabled: soundEnabled.checked });
         } catch (error) {
           // Retry on the next selection change.
         }
       }
 
-      for (const control of [region, alertMinutes]) {
+      for (const control of [region, alertMinutes, soundEnabled]) {
         control.addEventListener("change", () => {
           window.clearTimeout(saveTimer);
           saveTimer = window.setTimeout(saveSettings, 150);
@@ -65,4 +73,3 @@
   </script>
 </body>
 </html>
-

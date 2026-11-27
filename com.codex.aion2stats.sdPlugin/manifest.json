@@ -24,7 +24,7 @@
           "ShowTitle": false
         }
       ],
-      "Tooltip": "Zeigt Shugo-Countdown und Anmeldezeit. Vorwarnung einstellbar; das Logo blinkt in den letzten 30 Sekunden.",
+      "Tooltip": "Zeigt Shugo-Countdown und Anmeldezeit. Einstellbare visuelle und akustische Vorwarnung; Logo blinkt in den letzten 30 Sekunden.",
       "UUID": "com.codex.aion2stats.shugo"
     }
   ],
@@ -53,5 +53,5 @@
     "MinimumVersion": "7.1"
   },
   "UUID": "com.codex.aion2stats",
-  "Version": "0.2.5.0"
+  "Version": "0.2.6.0"
 }

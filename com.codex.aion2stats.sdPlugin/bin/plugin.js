@@ -16,6 +16,7 @@ var path = require('node:path');
 var node_process = require('node:process');
 var fs = require('node:fs');
 var node_crypto = require('node:crypto');
+var node_child_process = require('node:child_process');
 
 /**
  * Default language supported by all i18n providers.
@@ -8828,6 +8829,7 @@ let CharacterStatsAction = (() => {
 })();
 
 const alertOptions = [0, 1, 3, 5, 10];
+const hourMilliseconds = 3_600_000;
 const timeZones = {
     eu: { name: "EUROPA", zone: "Europe/Berlin" },
     nae: { name: "NA OST", zone: "America/New_York" },
@@ -8836,7 +8838,37 @@ const timeZones = {
     as: { name: "ASIEN", zone: "Asia/Seoul" },
 };
 const instances = new Map();
+const playedWarnings = new Set();
 const shugoIcon = `data:image/png;base64,${fs.readFileSync(path.join(__dirname, "..", "imgs", "aion2", "shugo_festa_icon.png")).toString("base64")}`;
+const shugoTonePath = path.join(__dirname, "..", "imgs", "aion2", "shugo-alert.wav");
+function playSignalTone() {
+    try {
+        if (process.platform === "win32") {
+            const soundPath = shugoTonePath.replace(/'/g, "''");
+            const command = `$player = New-Object System.Media.SoundPlayer '${soundPath}'; $player.PlaySync()`;
+            const player = node_child_process.spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", command], {
+                windowsHide: true,
+                stdio: "ignore",
+            });
+            player.once("error", (error) => streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`));
+            player.once("close", (code) => {
+                if (code !== 0)
+                    streamDeck.logger.warn(`Shugo-Signalton-Prozess wurde mit Code ${code} beendet.`);
+            });
+        }
+        else if (process.platform === "darwin") {
+            const player = node_child_process.spawn("/usr/bin/afplay", [shugoTonePath], { stdio: "ignore" });
+            player.once("error", (error) => streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${error.message}`));
+            player.once("close", (code) => {
+                if (code !== 0)
+                    streamDeck.logger.warn(`Shugo-Signalton-Prozess wurde mit Code ${code} beendet.`);
+            });
+        }
+    }
+    catch (error) {
+        streamDeck.logger.warn(`Shugo-Signalton konnte nicht abgespielt werden: ${String(error)}`);
+    }
+}
 function escapeXml(value) {
     return value.replace(/[<>&"']/g, (character) => ({
         "<": "&lt;",
@@ -8854,7 +8886,7 @@ function localTime(date, timeZone) {
         hourCycle: "h23",
     }).format(date);
 }
-function timerSvg(regionName, now, timeZone, alertMinutes) {
+function timerSvg(regionName, now, timeZone, alertMinutes, soundEnabled) {
     const millisecondsPastHour = now.getTime() % 3_600_000;
     const activeSeconds = 180 - Math.floor(millisecondsPastHour / 1000);
     const active = activeSeconds > 0;
@@ -8888,6 +8920,7 @@ function timerSvg(regionName, now, timeZone, alertMinutes) {
 <rect width="144" height="144" rx="17" fill="url(#bg)"/><rect x="3" y="3" width="138" height="138" rx="14" fill="none" stroke="url(#edge)" stroke-width="2"/>
 <path d="M12 26h120" stroke="#405a70" stroke-opacity=".7" stroke-width="1"/>
 <text x="72" y="19" fill="${accent}" font-family="Arial,sans-serif" font-size="8" font-weight="700" letter-spacing="1.25" text-anchor="middle">AION 2 · SHUGO</text>
+<text x="130" y="19" fill="${soundEnabled ? accent : "#405a70"}" font-family="Arial,sans-serif" font-size="10" font-weight="700" text-anchor="middle">♪</text>
 <text x="72" y="59" fill="${earlyWarning ? accent : "#fff7e8"}" font-family="Arial,sans-serif" font-size="32" font-weight="700" letter-spacing="-.6" text-anchor="middle"${earlyWarning ? ' filter="url(#glow)"' : ""}>${minutes}:${seconds}</text>
 <text x="72" y="76" fill="${accent}" font-family="Arial,sans-serif" font-size="8" font-weight="700" letter-spacing=".8" text-anchor="middle">${status}</text>
 <circle cx="72" cy="103" r="26" fill="#030912" stroke="${accent}" stroke-opacity=".72" stroke-width="1.5"/>
@@ -8895,12 +8928,31 @@ function timerSvg(regionName, now, timeZone, alertMinutes) {
 <text x="72" y="137" fill="#a8bac4" font-family="Arial,sans-serif" font-size="7.5" font-weight="700" letter-spacing=".5" text-anchor="middle">${escapeXml(footer)}</text>
 </svg>`;
 }
-function update(action, settings) {
+function update(instance) {
+    const { action, settings } = instance;
     const region = timeZones[settings.region ?? "eu"] ? settings.region ?? "eu" : "eu";
     const selected = timeZones[region];
     const requestedAlert = Number(settings.alertMinutes ?? 5);
     const alertMinutes = alertOptions.includes(requestedAlert) ? requestedAlert : 5;
-    void action.setImage(`data:image/svg+xml,${encodeURIComponent(timerSvg(selected.name, new Date(), selected.zone, alertMinutes))}`);
+    const soundEnabled = settings.soundEnabled !== false;
+    const now = new Date();
+    const millisecondsPastHour = now.getTime() % hourMilliseconds;
+    const active = 180 - Math.floor(millisecondsPastHour / 1000) > 0;
+    const secondsToEvent = Math.ceil((hourMilliseconds - millisecondsPastHour) / 1000);
+    const nextEvent = Math.floor(now.getTime() / hourMilliseconds) + 1;
+    const warningKey = `${nextEvent}:${alertMinutes}`;
+    for (const playedKey of playedWarnings) {
+        if (Number(playedKey.split(":")[0]) < nextEvent - 2)
+            playedWarnings.delete(playedKey);
+    }
+    if (soundEnabled && alertMinutes > 0 && !active && secondsToEvent > 0 && secondsToEvent <= alertMinutes * 60 && instance.lastSoundKey !== warningKey) {
+        instance.lastSoundKey = warningKey;
+        if (!playedWarnings.has(warningKey)) {
+            playedWarnings.add(warningKey);
+            playSignalTone();
+        }
+    }
+    void action.setImage(`data:image/svg+xml,${encodeURIComponent(timerSvg(selected.name, now, selected.zone, alertMinutes, soundEnabled))}`);
 }
 let ShugoTimerAction = (() => {
     let _classDecorators = [action({ UUID: "com.codex.aion2stats.shugo" })];
@@ -8920,30 +8972,37 @@ let ShugoTimerAction = (() => {
         onWillAppear(ev) {
             const action = ev.action;
             const settings = ev.payload.settings ?? {};
-            update(action, settings);
             const existing = instances.get(action.id);
-            if (existing)
+            if (existing?.interval)
                 clearInterval(existing.interval);
+            const instance = { action, settings };
+            instances.set(action.id, instance);
+            update(instance);
             const interval = setInterval(() => {
-                const instance = instances.get(action.id);
-                if (instance)
-                    update(instance.action, instance.settings);
+                const current = instances.get(action.id);
+                if (current)
+                    update(current);
             }, 500);
-            instances.set(action.id, { action, settings, interval });
+            instance.interval = interval;
         }
         onWillDisappear(ev) {
             const instance = instances.get(ev.action.id);
-            if (instance)
+            if (instance?.interval)
                 clearInterval(instance.interval);
             instances.delete(ev.action.id);
         }
         onDidReceiveSettings(ev) {
             const action = ev.action;
             const settings = ev.payload.settings ?? {};
-            const instance = instances.get(action.id);
-            if (instance)
+            let instance = instances.get(action.id);
+            if (!instance) {
+                instance = { action, settings };
+                instances.set(action.id, instance);
+            }
+            else {
                 instance.settings = settings;
-            update(action, settings);
+            }
+            update(instance);
         }
     });
     return _classThis;
@@ -8954,4 +9013,3 @@ streamDeck.actions.registerAction(new CharacterStatsAction());
 streamDeck.actions.registerAction(new ShugoTimerAction());
 streamDeck.connect();
 //# sourceMappingURL=plugin.js.map
-

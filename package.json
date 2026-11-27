@@ -1,10 +1,10 @@
 {
   "name": "aion2-streamdeck-stats",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/generate-icons.mjs && rollup -c",
+    "build": "node scripts/generate-icons.mjs && node scripts/generate-shugo-alert.mjs && rollup -c",
     "package": "npm run build && streamdeck pack com.codex.aion2stats.sdPlugin --output release/ --no-update-check --force && node scripts/prepare-release.mjs",
     "watch": "rollup -c -w"
   },
@@ -25,4 +25,3 @@
     "zod": "4.6.7"
   }
 }
-
