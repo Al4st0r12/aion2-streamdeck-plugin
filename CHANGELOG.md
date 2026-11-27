@@ -1,5 +1,17 @@
 # Änderungsprotokoll
 
+## 1.0.0.0 — Update-Hinweis
+
+- Beide Einstellungsfenster vergleichen die installierte Version mit dem neuesten öffentlichen GitHub-Release.
+- Bei einer neueren Version erscheint ein Download-Link zur Release-Seite; andernfalls wird „aktuelle Version“ angezeigt.
+- Das Prüfergebnis wird bis zu 30 Minuten lokal zwischengespeichert. Bei fehlender Verbindung bleiben die Einstellungen nutzbar und ein Link zu GitHub-Releases wird angezeigt.
+- Für die Versionsprüfung werden keine Charakter- oder Kontodaten übertragen.
+
+### Aktualisieren
+
+1. [AION-2-Stats-1.0.0.0.streamDeckPlugin herunterladen](https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases/download/v1.0.0.0/AION-2-Stats-1.0.0.0.streamDeckPlugin) und doppelklicken.
+2. Das Einstellungsfenster einer Charakter- oder Shugo-Taste zeigt künftig an, wenn ein neueres Release verfügbar ist.
+
 ## 0.2.9.0 — Verbindungsstatus und Offline-Werte
 
 - Bei erfolgreicher Abfrage zeigt die Charaktertaste „ONLINE“ mit Aktualisierungszeit.
@@ -65,3 +77,4 @@ Vorhandene Charakter-, Regions- und Vorwarneinstellungen bleiben beim Aktualisie
 3. Eine vorhandene Shugo-Taste auswählen und Region sowie Vorwarnung im Einstellungsbereich festlegen.
 
 Vorhandene Charaktereinstellungen bleiben beim Aktualisieren erhalten. Die Shugo-Vorwarnung ist standardmäßig auf 5 Minuten eingestellt; sie lässt sich jederzeit auf „Aus“ stellen.
+

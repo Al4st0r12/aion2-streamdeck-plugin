@@ -15,9 +15,21 @@
     .range-heading { display: flex; justify-content: space-between; align-items: center; }
     input[type="range"] { box-sizing: border-box; width: 100%; margin: 9px 0 0; accent-color: #e6c67a; }
     .hint { color: #c4cad4; font-size: 11px; line-height: 1.5; }
+    .update-check { margin: 0 0 16px; padding: 10px 11px; border: 1px solid #3d4148; border-left: 3px solid #57d5d2; border-radius: 6px; background: #27292d; font-size: 11px; line-height: 1.5; }
+    .update-check[data-state="available"] { border-left-color: #e6c67a; }
+    .update-check[data-state="error"] { border-left-color: #ff8b8b; }
+    .update-check strong, .update-check span { display: block; }
+    .update-check strong { margin-bottom: 3px; color: #e9edf3; }
+    .update-check a { display: inline-block; margin-top: 4px; color: #75d9d6; text-decoration: none; }
+    .update-check a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
+  <section class="update-check" data-update-check data-current-version="1.0.0.0" data-state="pending" role="status" aria-live="polite">
+    <strong>AION 2 Stats · v1.0.0.0</strong>
+    <span data-update-message>Suche nach Updates …</span>
+    <a data-update-link href="https://github.com/Al4st0r12/aion2-streamdeck-plugin/releases/latest" target="_blank" rel="noopener">Alle GitHub-Releases ansehen</a>
+  </section>
   <label for="region">Serverregion
     <select id="region">
       <option value="eu">Europa</option>
@@ -113,5 +125,7 @@
       client.getConnectionInfo().then((info) => applySettings(info.actionInfo?.payload?.settings || {}));
     })();
   </script>
+  <script src="update-check.js"></script>
 </body>
 </html>
+
