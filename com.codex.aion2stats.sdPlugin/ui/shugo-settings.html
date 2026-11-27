@@ -23,32 +23,46 @@
       <option value="as">Asien</option>
     </select>
   </label>
-  <p class="hint">Das Shugo-Festival startet laut aktuellem Zeitplan jede volle Stunde. Die Anmeldung ist in den ersten drei Minuten offen. Angezeigt wird die Zeit der ausgewählten Serverregion. In den letzten 30 Sekunden vor dem Start blinkt das Shugo-Logo; während der Anmeldung zeigt der Timer deren Restzeit.</p>
+  <label for="alertMinutes">Vorwarnung vor dem Start
+    <select id="alertMinutes">
+      <option value="0">Aus</option>
+      <option value="1">1 Minute</option>
+      <option value="3">3 Minuten</option>
+      <option value="5">5 Minuten</option>
+      <option value="10">10 Minuten</option>
+    </select>
+  </label>
+  <p class="hint">Das Shugo-Festival startet laut aktuellem Zeitplan jede volle Stunde. Die Anmeldung ist in den ersten drei Minuten offen. Die Vorwarnung hebt den Timer im gewählten Zeitraum farblich hervor. In den letzten 30 Sekunden blinkt das Shugo-Logo immer. Region und Vorwarnung gelten nur für diese Stream-Deck-Taste.</p>
   <script>
     (() => {
       const client = SDPIComponents.streamDeckClient;
       const region = document.getElementById("region");
+      const alertMinutes = document.getElementById("alertMinutes");
       let saveTimer;
 
       function applySettings(settings = {}) {
         region.value = settings.region || "eu";
+        alertMinutes.value = String(settings.alertMinutes ?? 5);
       }
 
       async function saveSettings() {
         try {
-          await client.setSettings({ region: region.value });
+          await client.setSettings({ region: region.value, alertMinutes: Number(alertMinutes.value) });
         } catch (error) {
           // Retry on the next selection change.
         }
       }
 
-      region.addEventListener("change", () => {
-        window.clearTimeout(saveTimer);
-        saveTimer = window.setTimeout(saveSettings, 150);
-      });
+      for (const control of [region, alertMinutes]) {
+        control.addEventListener("change", () => {
+          window.clearTimeout(saveTimer);
+          saveTimer = window.setTimeout(saveSettings, 150);
+        });
+      }
       client.didReceiveSettings.subscribe((event) => applySettings(event.payload?.settings || {}));
       client.getConnectionInfo().then((info) => applySettings(info.actionInfo?.payload?.settings || {}));
     })();
   </script>
 </body>
 </html>
+

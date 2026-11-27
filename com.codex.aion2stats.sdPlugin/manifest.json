@@ -24,7 +24,7 @@
           "ShowTitle": false
         }
       ],
-      "Tooltip": "Zeigt den Countdown über dem offiziellen Shugo-Festa-Logo. Das Logo blinkt 30 Sekunden vor Start.",
+      "Tooltip": "Zeigt Shugo-Countdown und Anmeldezeit. Vorwarnung einstellbar; das Logo blinkt in den letzten 30 Sekunden.",
       "UUID": "com.codex.aion2stats.shugo"
     }
   ],
@@ -53,5 +53,5 @@
     "MinimumVersion": "7.1"
   },
   "UUID": "com.codex.aion2stats",
-  "Version": "0.2.4.0"
+  "Version": "0.2.5.0"
 }
